@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -27,7 +27,7 @@ jobs:
       # 4 runs) or die mid-download (HH11). Fix perms + one retry, and cache
       # the healed compilers so later runs skip the downloader entirely.
       - name: Cache hardhat compilers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/hardhat-nodejs/compilers-v2
           key: hardhat-solc-${{ runner.os }}-${{ hashFiles('hardhat.config.*') }}
