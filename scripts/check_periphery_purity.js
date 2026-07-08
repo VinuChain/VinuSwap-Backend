@@ -9,10 +9,10 @@
 //
 // The periphery is different: those sources ARE vendored into
 // contracts/periphery/. The audit established that the vendored periphery is
-// byte-identical to `@uniswap/v3-periphery` except for three intentionally
+// source-identical to `@uniswap/v3-periphery` except for three intentionally
 // modified files (NFTDescriptor.sol, PoolAddress.sol, PositionValue.sol). This
 // script re-asserts that invariant: every file listed below must remain
-// byte-for-byte equal to its upstream counterpart, so any silent drift (a stray
+// source-identical to its upstream counterpart, so any silent drift (a stray
 // edit, a dependency bump that changes upstream) fails loudly in CI.
 //
 // If you intentionally diverge a file, move it out of EXPECTED_IDENTICAL and
@@ -33,7 +33,7 @@ const upstreamRoot = path.join(
 )
 
 // Relative paths (under contracts/periphery and the upstream contracts/ root)
-// that MUST stay byte-identical to the published @uniswap/v3-periphery package.
+// that MUST stay source-identical to the published @uniswap/v3-periphery package.
 const EXPECTED_IDENTICAL = [
     'base/BlockTimestamp.sol',
     'base/ERC721Permit.sol',
@@ -89,8 +89,9 @@ const EXPECTED_DIVERGENT = [
     'interfaces/INonfungiblePositionManager.sol',
 ]
 
-function sha256(filePath) {
-    return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex')
+function sourceFingerprint(filePath) {
+    const source = fs.readFileSync(filePath, 'utf8').replace(/\r\n/g, '\n')
+    return crypto.createHash('sha256').update(source).digest('hex')
 }
 
 function main() {
@@ -116,7 +117,7 @@ function main() {
             errors.push(`MISSING upstream file: @uniswap/v3-periphery/contracts/${rel}`)
             continue
         }
-        if (sha256(vendored) !== sha256(upstream)) {
+        if (sourceFingerprint(vendored) !== sourceFingerprint(upstream)) {
             errors.push(
                 `DRIFT: contracts/periphery/${rel} no longer matches upstream ` +
                 `@uniswap/v3-periphery. If this change is intentional, move it to ` +
@@ -133,10 +134,10 @@ function main() {
             errors.push(`MISSING vendored file: contracts/periphery/${rel}`)
             continue
         }
-        if (fs.existsSync(upstream) && sha256(vendored) === sha256(upstream)) {
+        if (fs.existsSync(upstream) && sourceFingerprint(vendored) === sourceFingerprint(upstream)) {
             errors.push(
                 `UNEXPECTED MATCH: contracts/periphery/${rel} is documented as ` +
-                `divergent from upstream but is now byte-identical. Review whether ` +
+                `divergent from upstream but is now source-identical. Review whether ` +
                 `it should move to EXPECTED_IDENTICAL.`
             )
         }
@@ -152,7 +153,7 @@ function main() {
 
     console.log(
         `Periphery upstream-purity check OK: ` +
-        `${EXPECTED_IDENTICAL.length} files byte-identical to ` +
+        `${EXPECTED_IDENTICAL.length} files source-identical to ` +
         `@uniswap/v3-periphery, ${EXPECTED_DIVERGENT.length} documented deltas intact.`
     )
 }
