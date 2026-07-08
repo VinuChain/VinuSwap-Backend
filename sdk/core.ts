@@ -16,9 +16,7 @@ import { encodePrice, decodePrice, withCustomTickSpacing } from "./utils";
 import { BigNumber } from "@ethersproject/bignumber";
 
 // @ts-ignore
-import { Token } from "@uniswap/sdk-core";
-// @ts-ignore
-import { Percent } from "@uniswap/sdk-core/dist";
+import { Percent, Token } from "@uniswap/sdk-core";
 // @ts-ignore
 import { TickMath, nearestUsableTick, Position, Pool } from "@uniswap/v3-sdk";
 import JSBI from "jsbi";
