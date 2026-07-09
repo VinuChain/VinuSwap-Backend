@@ -215,10 +215,36 @@ function runAudit() {
         )
     }
 
+    let report
     try {
-        return JSON.parse(result.stdout)
+        report = JSON.parse(result.stdout)
     } catch (error) {
         throw new Error(`Failed to parse npm audit JSON: ${error.message}`)
+    }
+
+    validateAuditReport(report)
+    return report
+}
+
+function validateAuditReport(report) {
+    if (report == null || typeof report !== 'object' || Array.isArray(report)) {
+        throw new Error('npm audit returned a non-object JSON payload')
+    }
+    if (report.error) {
+        throw new Error(`npm audit returned an error payload: ${JSON.stringify(report.error)}`)
+    }
+    if (
+        report.vulnerabilities == null ||
+        typeof report.vulnerabilities !== 'object' ||
+        Array.isArray(report.vulnerabilities)
+    ) {
+        throw new Error('npm audit JSON is missing the vulnerabilities object')
+    }
+    if (
+        report.metadata?.vulnerabilities == null ||
+        typeof report.metadata.vulnerabilities !== 'object'
+    ) {
+        throw new Error('npm audit JSON is missing metadata.vulnerabilities')
     }
 }
 
@@ -251,10 +277,9 @@ function checkKnownResidual(vulnerability, expected, errors) {
         )
     }
 
-    if (vulnerability.isDirect !== expected.isDirect) {
+    if (!expected.isDirect && vulnerability.isDirect) {
         errors.push(
-            `${vulnerability.name} direct dependency flag changed from ` +
-                `${expected.isDirect} to ${vulnerability.isDirect}`
+            `${vulnerability.name} became a direct production dependency`
         )
     }
 
