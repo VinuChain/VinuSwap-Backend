@@ -9,10 +9,10 @@ const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const MAX_BASELINE_COUNTS = {
     info: 0,
     low: 16,
-    moderate: 11,
+    moderate: 8,
     high: 1,
     critical: 0,
-    total: 28,
+    total: 25,
 }
 
 const SEVERITY_RANK = {
@@ -161,18 +161,6 @@ const KNOWN_PRODUCTION_RESIDUALS = {
         sources: [],
         nodes: ['node_modules/hardhat'],
     },
-    'hardhat-contract-sizer': {
-        severity: 'moderate',
-        isDirect: true,
-        sources: [],
-        nodes: ['node_modules/hardhat-contract-sizer'],
-    },
-    'hardhat-tracer': {
-        severity: 'moderate',
-        isDirect: true,
-        sources: [],
-        nodes: ['node_modules/hardhat-tracer'],
-    },
     'hardhat-watcher': {
         severity: 'moderate',
         isDirect: false,
@@ -184,12 +172,6 @@ const KNOWN_PRODUCTION_RESIDUALS = {
         isDirect: false,
         sources: [1112715, 1121860],
         nodes: ['node_modules/js-yaml'],
-    },
-    'solidity-docgen': {
-        severity: 'moderate',
-        isDirect: true,
-        sources: [],
-        nodes: ['node_modules/solidity-docgen'],
     },
     uuid: {
         severity: 'moderate',
