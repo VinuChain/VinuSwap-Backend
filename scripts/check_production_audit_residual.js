@@ -6,17 +6,197 @@ const { spawnSync } = require('child_process')
 
 const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
-const EXPECTED_OPENZEPPELIN_SOURCES = new Set([
-    1089132,
-    1090433,
-    1092641,
-    1094945,
-])
-
 const MAX_BASELINE_COUNTS = {
+    info: 0,
     low: 16,
     moderate: 11,
+    high: 1,
+    critical: 0,
     total: 28,
+}
+
+const SEVERITY_RANK = {
+    info: 0,
+    low: 1,
+    moderate: 2,
+    high: 3,
+    critical: 4,
+}
+
+const KNOWN_PRODUCTION_RESIDUALS = {
+    '@ethersproject/abi': {
+        severity: 'low',
+        isDirect: false,
+        sources: [],
+        nodes: ['node_modules/@ethersproject/abi'],
+    },
+    '@ethersproject/abstract-provider': {
+        severity: 'low',
+        isDirect: false,
+        sources: [],
+        nodes: ['node_modules/@ethersproject/abstract-provider'],
+    },
+    '@ethersproject/abstract-signer': {
+        severity: 'low',
+        isDirect: false,
+        sources: [],
+        nodes: ['node_modules/@ethersproject/abstract-signer'],
+    },
+    '@ethersproject/contracts': {
+        severity: 'low',
+        isDirect: false,
+        sources: [],
+        nodes: ['node_modules/@ethersproject/contracts'],
+    },
+    '@ethersproject/hash': {
+        severity: 'low',
+        isDirect: false,
+        sources: [],
+        nodes: ['node_modules/@ethersproject/hash'],
+    },
+    '@ethersproject/hdnode': {
+        severity: 'low',
+        isDirect: false,
+        sources: [],
+        nodes: ['node_modules/@ethersproject/hdnode'],
+    },
+    '@ethersproject/json-wallets': {
+        severity: 'low',
+        isDirect: false,
+        sources: [],
+        nodes: ['node_modules/@ethersproject/json-wallets'],
+    },
+    '@ethersproject/providers': {
+        severity: 'low',
+        isDirect: false,
+        sources: [],
+        nodes: ['node_modules/@ethersproject/providers'],
+    },
+    '@ethersproject/signing-key': {
+        severity: 'low',
+        isDirect: false,
+        sources: [],
+        nodes: ['node_modules/@ethersproject/signing-key'],
+    },
+    '@ethersproject/transactions': {
+        severity: 'low',
+        isDirect: false,
+        sources: [],
+        nodes: ['node_modules/@ethersproject/transactions'],
+    },
+    '@ethersproject/wallet': {
+        severity: 'low',
+        isDirect: false,
+        sources: [],
+        nodes: ['node_modules/@ethersproject/wallet'],
+    },
+    '@ethersproject/wordlists': {
+        severity: 'low',
+        isDirect: false,
+        sources: [],
+        nodes: ['node_modules/@ethersproject/wordlists'],
+    },
+    '@openzeppelin/contracts': {
+        severity: 'high',
+        isDirect: true,
+        sources: [1089132, 1090433, 1092641, 1094945],
+        nodes: [
+            'node_modules/@openzeppelin/contracts',
+            'node_modules/@uniswap/swap-router-contracts/node_modules/@openzeppelin/contracts',
+            'node_modules/@uniswap/v3-periphery/node_modules/@openzeppelin/contracts',
+            'node_modules/@uniswap/v3-staker/node_modules/@openzeppelin/contracts',
+        ],
+    },
+    '@sentry/node': {
+        severity: 'low',
+        isDirect: false,
+        sources: [],
+        nodes: ['node_modules/@sentry/node'],
+    },
+    '@uniswap/swap-router-contracts': {
+        severity: 'moderate',
+        isDirect: false,
+        sources: [],
+        nodes: ['node_modules/@uniswap/swap-router-contracts'],
+    },
+    '@uniswap/v3-periphery': {
+        severity: 'moderate',
+        isDirect: false,
+        sources: [],
+        nodes: ['node_modules/@uniswap/v3-periphery'],
+    },
+    '@uniswap/v3-sdk': {
+        severity: 'moderate',
+        isDirect: true,
+        sources: [],
+        nodes: ['node_modules/@uniswap/v3-sdk'],
+    },
+    '@uniswap/v3-staker': {
+        severity: 'moderate',
+        isDirect: false,
+        sources: [],
+        nodes: ['node_modules/@uniswap/v3-staker'],
+    },
+    cookie: {
+        severity: 'low',
+        isDirect: false,
+        sources: [1103907],
+        nodes: ['node_modules/cookie'],
+    },
+    elliptic: {
+        severity: 'low',
+        isDirect: false,
+        sources: [1112030],
+        nodes: ['node_modules/elliptic'],
+    },
+    ethers: {
+        severity: 'low',
+        isDirect: true,
+        sources: [],
+        nodes: ['node_modules/ethers'],
+    },
+    hardhat: {
+        severity: 'moderate',
+        isDirect: true,
+        sources: [],
+        nodes: ['node_modules/hardhat'],
+    },
+    'hardhat-contract-sizer': {
+        severity: 'moderate',
+        isDirect: true,
+        sources: [],
+        nodes: ['node_modules/hardhat-contract-sizer'],
+    },
+    'hardhat-tracer': {
+        severity: 'moderate',
+        isDirect: true,
+        sources: [],
+        nodes: ['node_modules/hardhat-tracer'],
+    },
+    'hardhat-watcher': {
+        severity: 'moderate',
+        isDirect: false,
+        sources: [],
+        nodes: ['node_modules/hardhat-watcher'],
+    },
+    'js-yaml': {
+        severity: 'moderate',
+        isDirect: false,
+        sources: [1112715, 1121860],
+        nodes: ['node_modules/js-yaml'],
+    },
+    'solidity-docgen': {
+        severity: 'moderate',
+        isDirect: true,
+        sources: [],
+        nodes: ['node_modules/solidity-docgen'],
+    },
+    uuid: {
+        severity: 'moderate',
+        isDirect: false,
+        sources: [1119441],
+        nodes: ['node_modules/uuid'],
+    },
 }
 
 function runAudit() {
@@ -48,59 +228,61 @@ function advisorySources(vulnerability) {
         .map((entry) => Number(entry.source))
 }
 
+function unexpectedValues(actual, expected) {
+    const expectedSet = new Set(expected)
+    return [...new Set(actual)].filter((value) => !expectedSet.has(value)).sort()
+}
+
+function severityRank(severity) {
+    return SEVERITY_RANK[severity] ?? Number.POSITIVE_INFINITY
+}
+
+function checkKnownResidual(vulnerability, expected, errors) {
+    const actualRank = severityRank(vulnerability.severity)
+    const expectedRank = severityRank(expected.severity)
+
+    // Sources and nodes are allowed maxima, not required exact sets: this gate
+    // should fail when the residual expands or changes identity, but pass when
+    // npm audit improves, remediates, or withdraws part of the known baseline.
+    if (actualRank > expectedRank) {
+        errors.push(
+            `${vulnerability.name} severity worsened from ${expected.severity} ` +
+                `to ${vulnerability.severity}`
+        )
+    }
+
+    if (vulnerability.isDirect !== expected.isDirect) {
+        errors.push(
+            `${vulnerability.name} direct dependency flag changed from ` +
+                `${expected.isDirect} to ${vulnerability.isDirect}`
+        )
+    }
+
+    for (const node of unexpectedValues(vulnerability.nodes || [], expected.nodes)) {
+        errors.push(`unexpected vulnerable node for ${vulnerability.name}: ${node}`)
+    }
+
+    for (const source of unexpectedValues(advisorySources(vulnerability), expected.sources)) {
+        errors.push(`unexpected advisory source for ${vulnerability.name}: ${source}`)
+    }
+}
+
 function main() {
     const report = runAudit()
     const vulnerabilities = report.vulnerabilities || {}
     const counts = report.metadata?.vulnerabilities || {}
     const errors = []
 
-    if ((counts.critical || 0) !== 0) {
-        errors.push(`expected 0 critical production vulnerabilities, found ${counts.critical}`)
-    }
-
-    const highOrCritical = Object.values(vulnerabilities).filter((vulnerability) =>
-        vulnerability.severity === 'high' || vulnerability.severity === 'critical'
-    )
-    const unexpected = highOrCritical.filter(
-        (vulnerability) => vulnerability.name !== '@openzeppelin/contracts'
-    )
-
-    for (const vulnerability of unexpected) {
-        errors.push(
-            `unexpected ${vulnerability.severity} production vulnerability: ` +
-                `${vulnerability.name}`
-        )
-    }
-
-    const openzeppelin = vulnerabilities['@openzeppelin/contracts']
-    if (!openzeppelin) {
-        errors.push('expected known @openzeppelin/contracts residual, but it was absent')
-    } else {
-        if (openzeppelin.severity !== 'high') {
+    for (const vulnerability of Object.values(vulnerabilities)) {
+        const expected = KNOWN_PRODUCTION_RESIDUALS[vulnerability.name]
+        if (!expected) {
             errors.push(
-                `expected @openzeppelin/contracts residual severity high, found ` +
-                    `${openzeppelin.severity}`
+                `unexpected ${vulnerability.severity} production vulnerability: ` +
+                    `${vulnerability.name}`
             )
+            continue
         }
-        if (!openzeppelin.isDirect) {
-            errors.push('expected @openzeppelin/contracts to remain a direct dependency')
-        }
-
-        const sources = new Set(advisorySources(openzeppelin))
-        for (const source of EXPECTED_OPENZEPPELIN_SOURCES) {
-            if (!sources.has(source)) {
-                errors.push(`missing expected OpenZeppelin advisory source ${source}`)
-            }
-        }
-        for (const source of sources) {
-            if (!EXPECTED_OPENZEPPELIN_SOURCES.has(source)) {
-                errors.push(`unexpected OpenZeppelin advisory source ${source}`)
-            }
-        }
-    }
-
-    if ((counts.high || 0) !== 1) {
-        errors.push(`expected exactly 1 high production vulnerability, found ${counts.high}`)
+        checkKnownResidual(vulnerability, expected, errors)
     }
 
     for (const [severity, maximum] of Object.entries(MAX_BASELINE_COUNTS)) {
