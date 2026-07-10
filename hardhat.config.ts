@@ -142,7 +142,7 @@ export default{
             // Pin the chain ID so a wrong or hijacked RPC URL cannot trick ethers
             // into signing transactions for a different chain (audit L-3).
             chainId: 207,
-            url: process.env.VINUSWAP_RPC_URL || "https://vinuchain-rpc.com",
+            url: process.env.VINUSWAP_RPC_URL || "https://rpc.vinuchain.org",
             accounts: vinuOwnerPrivateKey ? [vinuOwnerPrivateKey] : []
         }
     }
