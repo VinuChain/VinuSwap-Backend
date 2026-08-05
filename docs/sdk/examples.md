@@ -11,7 +11,7 @@ import { encodePrice, decodePrice } from './sdk/utils';
 
 // Configuration
 const config = {
-    rpcUrl: 'https://vinuchain-rpc.com',
+    rpcUrl: 'https://rpc.vinuchain.org',
     factory: '0xd74dEe1C78D5C58FbdDe619b707fcFbAE50c3EEe',
     quoter: '0xEed635Fa2343355d9bA726C379F2B5dEa70fE65C',
     router: '0x48f450475a8b501A7480C1Fd02935a7327F713Ad',

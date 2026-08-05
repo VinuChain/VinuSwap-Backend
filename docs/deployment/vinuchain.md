@@ -11,7 +11,7 @@ The network is already configured in `hardhat.config.ts`:
 ```typescript
 networks: {
     vinu: {
-        url: process.env.VINUSWAP_RPC_URL || 'https://vinuchain-rpc.com',
+        url: process.env.VINUSWAP_RPC_URL || 'https://rpc.vinuchain.org',
         accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
         chainId: 207
     }

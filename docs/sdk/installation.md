@@ -76,7 +76,7 @@ const provider = new ethers.providers.JsonRpcProvider('http://localhost:8545');
 
 ```typescript
 const provider = new ethers.providers.JsonRpcProvider(
-    'https://vinuchain-rpc.com'
+    'https://rpc.vinuchain.org'
 );
 ```
 
