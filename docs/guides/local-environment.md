@@ -127,7 +127,7 @@ const config: HardhatUserConfig = {
       accounts: { count: 80 },
     },
     vinu: {
-      url: process.env.VINUSWAP_RPC_URL || "https://vinuchain-rpc.com",
+      url: process.env.VINUSWAP_RPC_URL || "https://rpc.vinuchain.org",
       accounts: vinuOwnerPrivateKey ? [vinuOwnerPrivateKey] : [],
     },
   },
@@ -140,7 +140,7 @@ Create a `.env` file:
 
 ```bash
 # VinuChain RPC endpoint
-VINUSWAP_RPC_URL=https://vinuchain-rpc.com
+VINUSWAP_RPC_URL=https://rpc.vinuchain.org
 
 # Deployer private key (without 0x prefix)
 PRIVATE_KEY=your_private_key_here
