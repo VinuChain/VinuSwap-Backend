@@ -172,10 +172,25 @@ async function getPosition(tokenId) {
         liquidity: position.liquidity,
         feeGrowthInside0LastX128: position.feeGrowthInside0LastX128,
         feeGrowthInside1LastX128: position.feeGrowthInside1LastX128,
-        tokensOwed0: position.tokensOwed0,
-        tokensOwed1: position.tokensOwed1
+        lockedUntil: position.lockedUntil
     };
 }
+```
+
+VinuSwap's `positions()` returns 11 values ending in `lockedUntil`; there are
+**no** `tokensOwed0/1` fields (reading them yields `undefined`). Use the
+separate getters:
+
+```javascript
+// Stored (already accounted) uncollected amounts — view
+const [owed0, owed1] = await positionManager.tokensOwed(tokenId);
+
+// Stored + fees accrued since the last poke — NON-view; eth_call it only.
+// Reverts 'NP' when the NFPM's pool position for this range has 0 liquidity
+// (e.g. after a full decreaseLiquidity), so fall back to tokensOwed().
+const [quoted0, quoted1] = await positionManager.callStatic
+    .quoteTokensOwed(tokenId)
+    .catch(() => positionManager.tokensOwed(tokenId));
 ```
 
 ### Increase Liquidity
@@ -402,26 +417,16 @@ function getPositionAmounts(
 
 ```javascript
 async function getUnclaimedFees(pool, position, tokenId) {
-    const poolContract = new ethers.Contract(pool, poolABI, provider);
-
-    // Get global fee growth
-    const feeGrowthGlobal0 = await poolContract.feeGrowthGlobal0X128();
-    const feeGrowthGlobal1 = await poolContract.feeGrowthGlobal1X128();
-
-    // Get position fee snapshots
-    const positionData = await positionManager.positions(tokenId);
-
-    // Calculate fees (simplified - full calculation needs tick data)
-    const feeGrowthInside0 = feeGrowthGlobal0.sub(positionData.feeGrowthInside0LastX128);
-    const feeGrowthInside1 = feeGrowthGlobal1.sub(positionData.feeGrowthInside1LastX128);
-
-    const fees0 = feeGrowthInside0.mul(positionData.liquidity).div(ethers.BigNumber.from(2).pow(128));
-    const fees1 = feeGrowthInside1.mul(positionData.liquidity).div(ethers.BigNumber.from(2).pow(128));
-
-    return {
-        fees0: fees0.add(positionData.tokensOwed0),
-        fees1: fees1.add(positionData.tokensOwed1)
-    };
+    // quoteTokensOwed pokes the pool (burn 0) and returns stored + accrued fees.
+    // It is non-view: always eth_call it. It reverts 'NP' for a zero-liquidity
+    // range, in which case the stored tokensOwed() is the full answer.
+    try {
+        const [fees0, fees1] = await positionManager.callStatic.quoteTokensOwed(tokenId);
+        return { fees0, fees1 };
+    } catch {
+        const [fees0, fees1] = await positionManager.tokensOwed(tokenId);
+        return { fees0, fees1 };
+    }
 }
 ```
 
@@ -433,8 +438,15 @@ async function getUnclaimedFees(pool, position, tokenId) {
 const MIN_TICK = -887272;
 const MAX_TICK = 887272;
 
+// Tick spacing is a per-pool immutable chosen at creation, not a function of
+// the fee (VinuSwap has no fee -> tickSpacing table). Read it from the pool.
+async function getTickSpacing(token0, token1, fee) {
+    const poolAddress = await factory.getPool(token0, token1, fee);
+    return new ethers.Contract(poolAddress, poolABI, provider).tickSpacing();
+}
+
 async function createFullRangePosition(token0, token1, fee, amount0, amount1) {
-    const tickSpacing = getTickSpacing(fee);
+    const tickSpacing = await getTickSpacing(token0, token1, fee);
     const tickLower = Math.ceil(MIN_TICK / tickSpacing) * tickSpacing;
     const tickUpper = Math.floor(MAX_TICK / tickSpacing) * tickSpacing;
 
@@ -454,7 +466,7 @@ async function createNarrowPosition(
     amount0,
     amount1
 ) {
-    const tickSpacing = getTickSpacing(fee);
+    const tickSpacing = await getTickSpacing(token0, token1, fee);
     const currentTick = priceToTick(currentPrice);
 
     const ticksFromCurrent = Math.ceil(

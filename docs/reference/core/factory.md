@@ -147,7 +147,10 @@ function computePoolAddress(factory, token0, token1, fee) {
         [token0, token1] = [token1, token0];
     }
 
-    const POOL_INIT_CODE_HASH = '0x...'; // Get from PoolInitHelper
+    // Live VinuChain factory 0xd74dEe1C...: 0xe8b892178c932bab07f2a26456a3a5e2c79d3301113659dc834ca80e3ea3596e
+    // Local HEAD build (PoolInitHelper.getInitCodeHash()): 0xabbbd0d15b71abfbaad4b7a124f1070d10b298946137a0f9178c1a8d09b9ea3f
+    // See ../libraries/pool-address.md for the worked example.
+    const POOL_INIT_CODE_HASH = '0xe8b892178c932bab07f2a26456a3a5e2c79d3301113659dc834ca80e3ea3596e';
 
     const salt = ethers.utils.keccak256(
         ethers.utils.defaultAbiCoder.encode(
@@ -203,16 +206,24 @@ interface IVinuSwapFactory {
 
 ### Creating a Pool
 
+`createPool` is owner-only and on VinuChain the owner is the Controller
+(`0x47fF80713b1d66DdA47237AB374F3080E2075528`), so a direct call from an EOA
+reverts. Create pools through `Controller.createPool` (owner; initialises
+inline) or the permissionless `Controller.createStandardPool` (only fees with a
+non-zero default tick spacing: 500/10, 3000/60, 10000/200 live):
+
 ```javascript
-const factory = new ethers.Contract(factoryAddress, factoryABI, signer);
+const controller = new ethers.Contract(controllerAddress, controllerABI, signer);
 
 // Create WVC/USDT pool with 0.05% fee
-const tx = await factory.createPool(
+const tx = await controller.createPool(
+    factoryAddress,
     WVC_ADDRESS,
     USDT_ADDRESS,
     500,           // 0.05%
-    10,            // tick spacing
-    feeManager     // fee manager contract
+    10,            // tick spacing (free-form)
+    feeManager,    // fee manager contract
+    sqrtPriceX96   // initial price
 );
 
 const receipt = await tx.wait();

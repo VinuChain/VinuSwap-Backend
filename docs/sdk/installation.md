@@ -2,7 +2,22 @@
 
 ## Using the SDK
 
-The SDK is included in the VinuSwap repository and can be imported directly.
+Two SDKs exist; know which one you are using.
+
+- **Published package:** the VinuSwap frontend runs `vinuswap-sdk@0.0.21-development`
+  from npm (source: https://github.com/samuelemarro/vinuswap-sdk, ethers v6,
+  typechain ethers-v6). Its bundled ABIs match the deployed contracts (11-value
+  `positions()`, `tokensOwed`, `quoteTokensOwed`, `lock`, IQuoterV2 quoter, no
+  `flash`).
+- **Reference implementation:** `sdk/` in this repository (ethers v5). It is
+  **not** the build source of the npm package, and the two differ in behaviour:
+  the published package compares addresses case-sensitively (no normalisation
+  in `create()` / `quoteExactInput`), has no `validateSlippageRatio`, and returns
+  `protocolShare0/1 = Infinity` when `feeProtocol` is 0 (every current pool)
+  where `sdk/` returns 0; it also exposes extra public APIs (`positionInfo`,
+  `positionIdsOwnedBy`, and the exported `PositionInfo` type).
+
+The rest of this section documents the reference implementation in `sdk/`.
 
 ### Direct Import
 
@@ -12,17 +27,14 @@ import VinuSwap from './sdk/core';
 import { encodePrice, decodePrice } from './sdk/utils';
 ```
 
-### As a Package (Future)
-
-When published as an npm package:
+### Published package
 
 ```bash
-npm install vinu-swap
+npm install vinuswap-sdk   # what the frontend uses; ethers v6
 ```
 
-```typescript
-import VinuSwap from 'vinu-swap';
-```
+This repository's `package.json` name (`vinu-swap`) is the Hardhat project, not
+a published SDK.
 
 ## Dependencies
 

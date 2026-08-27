@@ -167,6 +167,8 @@ Updates the token, thresholds, and discounts configuration.
 | `_discounts` | `uint16[]` | New discounts in bps (ascending order, <= 10000) |
 
 **Requirements:**
+- `_token` must not be the zero address (HEAD source only — the **deployed**
+  TieredDiscount `0x5881…579E` predates this guard and lacks it)
 - Arrays must not be empty
 - Arrays must have the same length
 - Thresholds must be positive and strictly increasing
@@ -190,14 +192,22 @@ await tieredDiscount.updateInfo(
 
 ## Discount Tiers
 
-### Default Configuration
+### Live Configuration (VinuChain, `0x58818859dD0179498c530f549270F40fEB48579E`)
+
+There is no default table in the contract; tiers are whatever the owner last
+set. Read them with `token()`, `thresholds(i)` and `discounts(i)` (iterate
+until the call reverts). Snapshot at block 14680456 (2026-08-27), token = VINU:
 
 | Tier | Balance Threshold | Discount |
 |------|-------------------|----------|
-| 1 | ≥ 1,000 tokens | 1% (100 bps) |
-| 2 | ≥ 10,000 tokens | 2% (200 bps) |
-| 3 | ≥ 100,000 tokens | 3% (300 bps) |
-| 4 | ≥ 1,000,000 tokens | 4% (400 bps) |
+| 1 | ≥ 100B VINU (1e29 wei) | 5% (500 bps) |
+| 2 | ≥ 500B VINU (5e29 wei) | 10% (1000 bps) |
+| 3 | ≥ 1T VINU (1e30 wei) | 25% (2500 bps) |
+| 4 | ≥ 5T VINU (5e30 wei) | 50% (5000 bps) |
+| 5 | ≥ 10T VINU (1e31 wei) | 75% (7500 bps) |
+
+This contract is **not** the live default of `OverridableFeeManager` (that is
+`NoDiscount` `0xb961…a1be`); only the six legacy pools route to it directly.
 
 ### Tier Selection Logic
 
@@ -278,13 +288,16 @@ const tieredDiscount = await TieredDiscount.deploy(
     discounts
 );
 
-// Create pool with TieredDiscount as fee manager
-await factory.createPool(
+// Create pool with TieredDiscount as fee manager. The factory is owned by the
+// Controller, so go through it (initialises inline with sqrtPriceX96).
+await controller.createPool(
+    factory.address,
     tokenA,
     tokenB,
     3000,  // 0.3% base fee
     60,    // tick spacing
-    tieredDiscount.address  // fee manager
+    tieredDiscount.address,  // fee manager (immutable per pool)
+    sqrtPriceX96
 );
 ```
 

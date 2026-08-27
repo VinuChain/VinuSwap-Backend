@@ -1,48 +1,29 @@
+// Local end-to-end rehearsal: deploys the full topology on the hardhat network, creates and
+// initializes a pool via Controller.createPool, mints, swaps and collects. Exercised by
+// test/scripts.spec.ts so Controller/NFPM ABI drift fails CI.
 import { BigNumber } from "@ethersproject/bignumber"
 import hre from 'hardhat'
 import { ethers } from "hardhat"
 import bn from 'bignumber.js'
 import { expect } from "chai"
 
-let deployer: any
-
-let weth9Contract : any
-let token0Contract : any
-let token1Contract : any
-let discountTokenContract : any
-
-let controllerContract : any
-let tieredDiscountContract : any
-let factoryContract : any
-let poolContract: any
-let routerContract : any
-let nftDescriptorLibraryContract : any
-let positionDescriptorContract : any
-let positionManagerContract : any
-
 const MONE = BigNumber.from('1000000000000000000') //10**18
 
-const FEE = 2500 // 0.25%
-const TICK_SPACING = 2
-const PROTOCOL_FEE = 5 // Corresponding to 20% of the entire fee (20% of 0.25% = 0.05%). The rest (0.20%) goes to LPs
-const SHARES = [1, 2, 2] // DAO treasury: 0.01%, $VINU Buy & Burns: 0.02%, $VINUCHAIN Buy & Burns: 0.02%
+export const FEE = 2500 // 0.25%
+export const TICK_SPACING = 2
+export const PROTOCOL_FEE = 5 // Corresponding to 20% of the entire fee (20% of 0.25% = 0.05%). The rest (0.20%) goes to LPs
+export const SHARES = [1, 2, 2] // DAO treasury: 0.01%, $VINU Buy & Burns: 0.02%, $VINUCHAIN Buy & Burns: 0.02%
+export const NATIVE_CURRENCY_LABEL = 'VC'
 
 // Example thresholds and discounts
 // Keep in mind that VinuSwap fees are in hundredths of a bip (1/1e6), while
 // the discounts are in basis points (1/1e4)
-const THRESHOLDS = [MONE.mul(1000), MONE.mul(10000), MONE.mul(100000), MONE.mul(1000000)]
+export const THRESHOLDS = [MONE.mul(1000), MONE.mul(10000), MONE.mul(100000), MONE.mul(1000000)]
 // 1%, 2%, 3%, 4%
-const DISCOUNTS = [100, 200, 300, 400]
-
-
-let TOKEN_0 : string
-let TOKEN_1 : string
-let WETH : string
-let DISCOUNT_TOKEN : string
-
+export const DISCOUNTS = [100, 200, 300, 400]
 
 bn.config({ EXPONENTIAL_AT: 999999, DECIMAL_PLACES: 40 })
-function encodePriceSqrt(ratio : BigNumber){
+export function encodePriceSqrt(ratio : BigNumber){
   return BigNumber.from(
     new bn(ratio.toString()).sqrt()
       .multipliedBy(new bn(2).pow(96))
@@ -51,147 +32,144 @@ function encodePriceSqrt(ratio : BigNumber){
   )
 }
 
-function getTimestamp() {
-    return Math.round(Date.now() / 1000);
+async function chainDeadline() {
+    return (await ethers.provider.getBlock('latest')).timestamp + 1000000
 }
 
-async function basicSetup(useMockErc20s : boolean) {
-    const [a] = await ethers.getSigners()
-    deployer = a
-    console.log('Signer created.')
+export interface Deployment {
+    deployer: any
+    token0Contract: any
+    token1Contract: any
+    discountTokenContract: any
+    weth9Contract: any
+    controllerContract: any
+    factoryContract: any
+    routerContract: any
+    positionDescriptorContract: any
+    positionManagerContract: any
+    noDiscountContract: any
+    tieredDiscountContract: any
+    overridableFeeManagerContract: any
+    poolContract?: any
+}
+
+export async function basicSetup(useMockErc20s : boolean) {
+    const [deployer] = await ethers.getSigners()
 
     const erc20ContractName = useMockErc20s ? 'MockERC20' : 'ERC20'
     const erc20Blueprint = await hre.ethers.getContractFactory(erc20ContractName)
 
-    token0Contract = await erc20Blueprint.deploy()
-    token1Contract = await erc20Blueprint.deploy()
+    let token0Contract = await erc20Blueprint.deploy()
+    let token1Contract = await erc20Blueprint.deploy()
 
-    if (token0Contract.address > token1Contract.address) {
-        // token0 is always the one with the lower address
+    // token0 is always the one with the lower address. Compare lowercased: Contract.address is
+    // EIP-55 mixed case and string order of 'A'-'F' vs 'a'-'f' disagrees with numeric order.
+    if (token0Contract.address.toLowerCase() > token1Contract.address.toLowerCase()) {
         [token0Contract, token1Contract] = [token1Contract, token0Contract]
     }
-
-    TOKEN_0 = token0Contract.address
-    TOKEN_1 = token1Contract.address
+    expect(token0Contract.address.toLowerCase() < token1Contract.address.toLowerCase(), 'token0 < token1').to.be.true
 
     await token0Contract.connect(deployer).mint(MONE.mul(MONE))
     await token1Contract.connect(deployer).mint(MONE.mul(MONE))
 
-    discountTokenContract = await erc20Blueprint.deploy()
-    DISCOUNT_TOKEN = discountTokenContract.address
+    const discountTokenContract = await erc20Blueprint.deploy()
 
     const weth9Blueprint = await hre.ethers.getContractFactory('WETH9')
-    weth9Contract = await weth9Blueprint.deploy()
-    WETH = weth9Contract.address
+    const weth9Contract = await weth9Blueprint.deploy()
 
     console.log('Finished basic setup.')
+    return { deployer, token0Contract, token1Contract, discountTokenContract, weth9Contract }
 }
 
-async function deployCommonContracts(accounts, shares, discountThresholds, discounts) {
-    // Steps:
-    // 1. Deploy Controller
-    // 2. Deploy VinuSwapFactory
-    // 3. Transfer ownership of VinuSwapFactory to Controller
-    // 4. Deploy SwapRouter
-    // 5. Deploy NonfungibleTokenPositionDescriptor
-    // 6. Deploy NonfungiblePositionManager
-    // 7. Deploy TieredDiscount
-    
+export async function deployCommonContracts(accounts, shares, discountToken : string, discountThresholds, discounts, WETH : string) {
+    const [deployer] = await ethers.getSigners()
 
     // 1. Deploy Controller
-    const controllerBlueprint = await hre.ethers.getContractFactory('Controller')
-    controllerContract = await controllerBlueprint.deploy(
-        accounts,
-        shares
-    )
+    const controllerContract = await (await hre.ethers.getContractFactory('Controller')).deploy(accounts, shares)
 
     // 2. Deploy VinuSwapFactory
-    const factoryBlueprint = await hre.ethers.getContractFactory('VinuSwapFactory')
-    factoryContract = await factoryBlueprint.deploy()
+    const factoryContract = await (await hre.ethers.getContractFactory('VinuSwapFactory')).deploy()
 
     // 3. Transfer ownership of VinuSwapFactory to Controller
     await factoryContract.connect(deployer).setOwner(controllerContract.address)
 
     // 4. Deploy SwapRouter
-    const routerBlueprint = await hre.ethers.getContractFactory('SwapRouter')
-    routerContract = await routerBlueprint.deploy(factoryContract.address, WETH)
+    const routerContract = await (await hre.ethers.getContractFactory('SwapRouter')).deploy(factoryContract.address, WETH)
 
-    // 5. Deploy NonfungibleTokenPositionDescriptor
-
-    // 5.1 Deploy NFTDescriptor
-    const nftDescriptorLibraryBlueprint = await hre.ethers.getContractFactory('NFTDescriptor')
-    nftDescriptorLibraryContract = await nftDescriptorLibraryBlueprint.deploy()
-    
-    // 5.2 Deploy NonfungibleTokenPositionDescriptor
+    // 5. Deploy NFTDescriptor library + NonfungibleTokenPositionDescriptor
+    const nftDescriptorLibraryContract = await (await hre.ethers.getContractFactory('NFTDescriptor')).deploy()
     const positionDescriptorBlueprint = await hre.ethers.getContractFactory('NonfungibleTokenPositionDescriptor', {
         libraries: {
             NFTDescriptor: nftDescriptorLibraryContract.address
         }
     })
-    positionDescriptorContract = await positionDescriptorBlueprint.deploy(
+    const positionDescriptorContract = await positionDescriptorBlueprint.deploy(
         WETH,
-        hre.ethers.utils.formatBytes32String('VinuSwap Position')
+        hre.ethers.utils.formatBytes32String(NATIVE_CURRENCY_LABEL)
     )
 
     // 6. Deploy NonfungiblePositionManager
-    const positionManagerBlueprint = await hre.ethers.getContractFactory('NonfungiblePositionManager')
-    positionManagerContract = await positionManagerBlueprint.deploy(
+    const positionManagerContract = await (await hre.ethers.getContractFactory('NonfungiblePositionManager')).deploy(
         factoryContract.address,
         WETH,
         positionDescriptorContract.address
     )
 
-    // 7. Deploy TieredDiscount
-    const tieredDiscountBlueprint = await hre.ethers.getContractFactory('TieredDiscount')
-    tieredDiscountContract = await tieredDiscountBlueprint.deploy(
-        DISCOUNT_TOKEN,
+    // 7. Fee policy: NoDiscount + TieredDiscount behind OverridableFeeManager (live topology)
+    const noDiscountContract = await (await hre.ethers.getContractFactory('NoDiscount')).deploy()
+    const tieredDiscountContract = await (await hre.ethers.getContractFactory('TieredDiscount')).deploy(
+        discountToken,
         discountThresholds,
         discounts
     )
+    // Live topology: the OverridableFeeManager routes to NoDiscount by default; tiered
+    // discounts are an explicit opt-in (VINUSWAP_DEFAULT_DISCOUNT=tiered), as in deploy_core.ts.
+    const tieredDefault = process.env.VINUSWAP_DEFAULT_DISCOUNT === 'tiered'
+    const overridableFeeManagerContract = await (await hre.ethers.getContractFactory('OverridableFeeManager')).deploy(
+        tieredDefault ? tieredDiscountContract.address : noDiscountContract.address
+    )
+    await controllerContract.connect(deployer).setDefaultFeeManager(factoryContract.address, overridableFeeManagerContract.address)
 
     console.log('Deployed common contracts.')
+    return {
+        controllerContract,
+        factoryContract,
+        routerContract,
+        positionDescriptorContract,
+        positionManagerContract,
+        noDiscountContract,
+        tieredDiscountContract,
+        overridableFeeManagerContract,
+    }
 }
 
+export async function deployPool (d : Deployment, fee, tickSpacing, feeManagerAddress : string, initialPrice) {
+    // Controller.createPool creates AND initializes; a separate initialize() would revert 'AI'.
+    const tx = await d.controllerContract.createPool(
+        d.factoryContract.address, d.token0Contract.address, d.token1Contract.address, fee, tickSpacing, feeManagerAddress, initialPrice
+    )
+    const created = (await tx.wait()).events.find(e => e.event === 'PoolCreated')
+    expect(created, 'Controller PoolCreated event').to.not.be.undefined
 
-async function deployPool (fee, tickSpacing, discountContract, initialPrice) {
-    // 1. Deploy VinuSwapPool by calling createPool on Controller
-    // 2. Initialize the pool by calling initialize on Controller
-    // 3. Set the protocol fee on the pool by calling setFeeProtocol on Controller
+    const poolContract = (await hre.ethers.getContractFactory('VinuSwapPool')).attach(created.args.pool)
+    expect((await poolContract.slot0()).sqrtPriceX96.toString()).to.equal(initialPrice.toString())
 
-    // 1. Deploy VinuSwapPool by calling createPool on Controller
-    const tx = await controllerContract.createPool(factoryContract.address, TOKEN_0, TOKEN_1, fee, tickSpacing, discountContract.address)
-    const contractAddress = (await tx.wait()).events[1].args.pool
-
-    const poolContractBlueprint = await hre.ethers.getContractFactory('VinuSwapPool')
-    poolContract = poolContractBlueprint.attach(contractAddress)
-
-    expect(poolContract.address).to.be.a('string')
-
-    // 2. Initialize the pool by calling initialize on Controller
-    await controllerContract.initialize(poolContract.address, initialPrice)
-
-    // 3. Set the protocol fee of the pool by calling setFeeProtocol on Controller
-    await controllerContract.setFeeProtocol(poolContract.address, PROTOCOL_FEE, PROTOCOL_FEE)
+    await d.controllerContract.setFeeProtocol(poolContract.address, PROTOCOL_FEE, PROTOCOL_FEE)
 
     console.log('Deployed pool.')
+    return poolContract
 }
 
-async function testContract (minter, swapper, fee, controllerPayees) {
-    // As a sanity check, we will test the following:
-    // 1. Mint a position
-    // 2. Swap some tokens
-    // 3. Collect LP fees
-    // 4. Collect protocol fees
+export async function testContract (d : Deployment, minter, swapper, fee, controllerPayees) {
+    // 1. Mint a position, 2. swap, 3. collect LP fees, 4. collect protocol fees
+    const { token0Contract, token1Contract, positionManagerContract, routerContract, controllerContract, poolContract, deployer } = d
 
     const minterInitialToken0Balance = await token0Contract.balanceOf(minter.address)
-    const minterInitialToken1Balance = await token1Contract.balanceOf(minter.address)
-    const swapperInitialToken0Balance = await token0Contract.balanceOf(swapper.address)
     const swapperInitialToken1Balance = await token1Contract.balanceOf(swapper.address)
 
-    // 1. Mint a position
     const mintParams = {
-        token0 : TOKEN_0,
-        token1 : TOKEN_1,
+        token0 : token0Contract.address,
+        token1 : token1Contract.address,
         fee,
         tickLower : -887272,
         tickUpper : 887272,
@@ -200,7 +178,7 @@ async function testContract (minter, swapper, fee, controllerPayees) {
         amount0Min : 0,
         amount1Min : 0,
         recipient : minter.address,
-        deadline : getTimestamp() + 1000000
+        deadline : await chainDeadline()
     }
 
     await token0Contract.connect(minter).approve(positionManagerContract.address, MONE.mul(1000))
@@ -208,79 +186,64 @@ async function testContract (minter, swapper, fee, controllerPayees) {
     await positionManagerContract.connect(minter).mint(mintParams)
 
     const minterIntermediateToken0Balance = await token0Contract.balanceOf(minter.address)
-    const minterIntermediateToken1Balance = await token1Contract.balanceOf(minter.address)
+    expect(minterIntermediateToken0Balance.lt(minterInitialToken0Balance), 'mint pulled token0').to.be.true
 
-    console.log('Minter token0 variation (after mint):', minterIntermediateToken0Balance.sub(minterInitialToken0Balance).toString())
-    console.log('Minter token1 variation (after mint):', minterIntermediateToken1Balance.sub(minterInitialToken1Balance).toString())
-
-    // 2. Swap some tokens
     await token0Contract.connect(swapper).approve(routerContract.address, MONE)
 
     const swapParams = {
-        tokenIn : TOKEN_0,
-        tokenOut : TOKEN_1,
+        tokenIn : token0Contract.address,
+        tokenOut : token1Contract.address,
         fee,
         recipient : swapper.address,
-        deadline : getTimestamp() + 1000000,
+        deadline : await chainDeadline(),
         amountIn : MONE,
         amountOutMinimum : 0,
         sqrtPriceLimitX96 : 0
     }
 
     await routerContract.connect(swapper).exactInputSingle(swapParams)
+    expect((await token1Contract.balanceOf(swapper.address)).gt(swapperInitialToken1Balance), 'swap paid token1').to.be.true
 
     const UINT128_MAX = BigNumber.from(2).pow(128).sub(1)
 
-    // 3. Collect LP fees
     const collectParams = {
         tokenId : 1,
         recipient : deployer.address,
         amount0Max : UINT128_MAX,
         amount1Max : UINT128_MAX
     }
-
     await positionManagerContract.connect(minter).collect(collectParams)
 
-    // 4. Collect protocol fees
     await controllerContract.connect(deployer).collectProtocolFees(poolContract.address, UINT128_MAX, UINT128_MAX)
-    
-    const minterFinalToken0Balance = await token0Contract.balanceOf(minter.address)
-    const minterFinalToken1Balance = await token1Contract.balanceOf(minter.address)
-    const swapperFinalToken0Balance = await token0Contract.balanceOf(swapper.address)
-    const swapperFinalToken1Balance = await token1Contract.balanceOf(swapper.address)
 
-    console.log('Minter token0 variation (after swap):', minterFinalToken0Balance.sub(minterIntermediateToken0Balance).toString())
-    console.log('Minter token1 variation (after swap):', minterFinalToken1Balance.sub(minterIntermediateToken1Balance).toString())
-    console.log('Swapper token0 variation:', swapperFinalToken0Balance.sub(swapperInitialToken0Balance).toString())
-    console.log('Swapper token1 variation:', swapperFinalToken1Balance.sub(swapperInitialToken1Balance).toString())
-
-    for (let i = 0; i < controllerPayees.length; i++) {
-        const payee = controllerPayees[i]
-        const payeeToken0Balance = await controllerContract.balanceOf(payee, TOKEN_0)
-        const payeeToken1Balance = await controllerContract.balanceOf(payee, TOKEN_1)
-
-        console.log(`Controller payee #${i + 1} token0 balance:`, payeeToken0Balance.toString())
-        console.log(`Controller payee #${i + 1} token1 balance:`, payeeToken1Balance.toString())
+    const payeeBalances : BigNumber[] = []
+    for (const payee of controllerPayees) {
+        payeeBalances.push(await controllerContract.balanceOf(payee, token0Contract.address))
     }
+    expect(payeeBalances.some(b => b.gt(0)), 'protocol fees distributed').to.be.true
 
     console.log('Tested contracts.')
+    return payeeBalances
 }
 
-async function main() {
+export async function deployAll() : Promise<Deployment> {
     const [, alice, bob, charlie, dan] = await ethers.getSigners()
-
     const payeeAddresses = [alice.address, bob.address, charlie.address]
 
-    await basicSetup(true)
-    await deployCommonContracts(payeeAddresses, SHARES, THRESHOLDS, DISCOUNTS)
-    await deployPool(FEE, TICK_SPACING, tieredDiscountContract, encodePriceSqrt(BigNumber.from(2)))
-    await token0Contract.connect(deployer).transfer(dan.address, MONE)
-    await testContract(deployer, dan, FEE, payeeAddresses)
-
-    console.log('Done.')
+    const setup = await basicSetup(true)
+    const common = await deployCommonContracts(
+        payeeAddresses, SHARES, setup.discountTokenContract.address, THRESHOLDS, DISCOUNTS, setup.weth9Contract.address
+    )
+    const d : Deployment = { ...setup, ...common }
+    d.poolContract = await deployPool(d, FEE, TICK_SPACING, common.overridableFeeManagerContract.address, encodePriceSqrt(BigNumber.from(2)))
+    await setup.token0Contract.connect(setup.deployer).transfer(dan.address, MONE)
+    await testContract(d, setup.deployer, dan, FEE, payeeAddresses)
+    return d
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-})
+if (require.main === module) {
+    deployAll().then(() => console.log('Done.')).catch((error) => {
+        console.error(error)
+        process.exitCode = 1
+    })
+}

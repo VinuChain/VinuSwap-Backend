@@ -149,11 +149,11 @@ contract PoolInitHelper {
 ```javascript
 const poolInitHelper = new ethers.Contract(
     POOL_INIT_HELPER_ADDRESS,
-    ['function POOL_INIT_CODE_HASH() view returns (bytes32)'],
+    ['function getInitCodeHash() view returns (bytes32)'],
     provider
 );
 
-const initCodeHash = await poolInitHelper.POOL_INIT_CODE_HASH();
+const initCodeHash = await poolInitHelper.getInitCodeHash();
 ```
 
 ## Interface

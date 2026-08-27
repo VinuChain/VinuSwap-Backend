@@ -1,4 +1,8 @@
-import { ethers } from "hardhat"
+// Points OverridableFeeManager.defaultFeeManager at TieredDiscount (and, by default, the
+// Controller's factory default at OverridableFeeManager). Every write is simulated, printed
+// before/after, gated on VINUSWAP_CONFIRM and asserted after confirmation (see preflight.ts).
+import { ethers } from 'hardhat'
+import { Preflight } from './preflight'
 
 const DEFAULT_CONTROLLER_ADDRESS = "0x47fF80713b1d66DdA47237AB374F3080E2075528"
 const DEFAULT_FACTORY_ADDRESS = "0xd74dEe1C78D5C58FbdDe619b707fcFbAE50c3EEe"
@@ -18,93 +22,105 @@ function envFlag(name: string, fallback: boolean) {
     return !["0", "false", "no", "off"].includes(value.toLowerCase())
 }
 
-async function requireOwner(contractLabel: string, contract: any, signerAddress: string) {
-    const owner = ethers.utils.getAddress(await contract.owner())
-    if (owner !== signerAddress) {
-        throw new Error(`${contractLabel} owner is ${owner}, but signer is ${signerAddress}`)
-    }
-}
-
-async function waitForTransaction(label: string, txPromise: Promise<any>) {
-    const tx = await txPromise
-    console.log(`${label} tx:`, tx.hash)
-    await tx.wait()
-    console.log(`${label} confirmed`)
-}
-
-async function main() {
-    const controllerAddress = envAddress("VINUSWAP_CONTROLLER_ADDRESS", DEFAULT_CONTROLLER_ADDRESS)
-    const factoryAddress = envAddress("VINUSWAP_FACTORY_ADDRESS", DEFAULT_FACTORY_ADDRESS)
-    const overridableFeeManagerAddress = envAddress(
-        "VINUSWAP_OVERRIDABLE_FEE_MANAGER_ADDRESS",
-        DEFAULT_OVERRIDABLE_FEE_MANAGER_ADDRESS
-    )
-    const tieredDiscountAddress = envAddress("VINUSWAP_TIERED_DISCOUNT_ADDRESS", DEFAULT_TIERED_DISCOUNT_ADDRESS)
-    const setControllerDefault = envFlag("VINUSWAP_SET_CONTROLLER_DEFAULT", true)
-
-    const [signer] = await ethers.getSigners()
-    if (!signer) {
-        throw new Error("No signer configured. Add VINUSWAP_OWNER_PRIVATE_KEY to .env.")
-    }
-
-    const signerAddress = ethers.utils.getAddress(await signer.getAddress())
-    console.log("Signer:", signerAddress)
+export async function configureDiscountDefaults(
+    pre: Preflight,
+    controllerAddress: string,
+    factoryAddress: string,
+    overridableFeeManagerAddress: string,
+    tieredDiscountAddress: string,
+    setControllerDefault: boolean
+) {
     console.log("Controller:", controllerAddress)
     console.log("Factory:", factoryAddress)
     console.log("Overridable fee manager:", overridableFeeManagerAddress)
     console.log("Tiered discount:", tieredDiscountAddress)
 
-    const controller = await ethers.getContractAt("Controller", controllerAddress, signer)
-    const overridableFeeManager = await ethers.getContractAt(
-        "OverridableFeeManager",
-        overridableFeeManagerAddress,
-        signer
-    )
-    const tieredDiscount = await ethers.getContractAt("TieredDiscount", tieredDiscountAddress, signer)
+    const controller = await ethers.getContractAt("Controller", controllerAddress)
+    const overridableFeeManager = await ethers.getContractAt("OverridableFeeManager", overridableFeeManagerAddress)
+    const tieredDiscount = await ethers.getContractAt("TieredDiscount", tieredDiscountAddress)
 
-    await requireOwner("OverridableFeeManager", overridableFeeManager, signerAddress)
+    await pre.assertCode("OverridableFeeManager", overridableFeeManagerAddress, "OverridableFeeManager")
+    await pre.assertCode("TieredDiscount", tieredDiscountAddress, "TieredDiscount")
+    await pre.assertCode("Factory", factoryAddress)
+    await pre.assertOwner("OverridableFeeManager", overridableFeeManager)
     if (setControllerDefault) {
-        await requireOwner("Controller", controller, signerAddress)
+        await pre.assertCode("Controller", controllerAddress, "Controller")
+        await pre.assertOwner("Controller", controller)
     }
 
     const discountToken = await tieredDiscount.token()
-    const firstThreshold = await tieredDiscount.thresholds(0)
-    const firstDiscount = await tieredDiscount.discounts(0)
-    await tieredDiscount.callStatic.computeFeeFor(2500, signerAddress)
+    const tiers: string[] = []
+    for (let i = 0; ; i++) {
+        try {
+            tiers.push(`${(await tieredDiscount.thresholds(i)).toString()} -> ${await tieredDiscount.discounts(i)} bps`)
+        } catch {
+            break
+        }
+    }
+    await tieredDiscount.callStatic.computeFeeFor(2500, pre.signerAddress)
     console.log("Discount token:", discountToken)
-    console.log("First discount tier:", firstThreshold.toString(), firstDiscount.toString())
+    console.log("Discount tiers:", tiers)
 
     const currentOverridableDefault = ethers.utils.getAddress(await overridableFeeManager.defaultFeeManager())
-    console.log("Current Overridable default:", currentOverridableDefault)
     if (currentOverridableDefault !== tieredDiscountAddress) {
-        await waitForTransaction(
-            "Set Overridable default fee manager",
-            overridableFeeManager.setDefaultFeeManager(tieredDiscountAddress)
-        )
+        await pre.mutate({
+            label: "OverridableFeeManager.setDefaultFeeManager",
+            contract: overridableFeeManager,
+            method: "setDefaultFeeManager",
+            args: [tieredDiscountAddress],
+            readState: () => overridableFeeManager.defaultFeeManager(),
+            expectedAfter: tieredDiscountAddress,
+        })
     } else {
         console.log("Overridable default already points at the tiered discount manager")
     }
 
     if (setControllerDefault) {
         const currentControllerDefault = ethers.utils.getAddress(await controller.defaultFeeManager(factoryAddress))
-        console.log("Current Controller default for factory:", currentControllerDefault)
         if (currentControllerDefault !== overridableFeeManagerAddress) {
-            await waitForTransaction(
-                "Set Controller default fee manager",
-                controller.setDefaultFeeManager(factoryAddress, overridableFeeManagerAddress)
-            )
+            await pre.mutate({
+                label: "Controller.setDefaultFeeManager",
+                contract: controller,
+                method: "setDefaultFeeManager",
+                args: [factoryAddress, overridableFeeManagerAddress],
+                readState: () => controller.defaultFeeManager(factoryAddress),
+                expectedAfter: overridableFeeManagerAddress,
+            })
         } else {
             console.log("Controller default already points at the overridable fee manager")
         }
     }
 
-    const finalOverridableDefault = await overridableFeeManager.defaultFeeManager()
-    const finalControllerDefault = await controller.defaultFeeManager(factoryAddress)
+    const finalOverridableDefault = ethers.utils.getAddress(await overridableFeeManager.defaultFeeManager())
+    const finalControllerDefault = ethers.utils.getAddress(await controller.defaultFeeManager(factoryAddress))
     console.log("Final Overridable default:", finalOverridableDefault)
     console.log("Final Controller default for factory:", finalControllerDefault)
+    if (finalOverridableDefault !== tieredDiscountAddress) {
+        throw new Error("Overridable default does not point at the tiered discount manager after configuration")
+    }
+    if (setControllerDefault && finalControllerDefault !== overridableFeeManagerAddress) {
+        throw new Error("Controller default does not point at the overridable fee manager after configuration")
+    }
 }
 
-main().catch((error) => {
-    console.error(error)
-    process.exitCode = 1
-}).then(() => process.exit())
+async function main() {
+    const pre = await Preflight.create()
+    await configureDiscountDefaults(
+        pre,
+        envAddress("VINUSWAP_CONTROLLER_ADDRESS", DEFAULT_CONTROLLER_ADDRESS),
+        envAddress("VINUSWAP_FACTORY_ADDRESS", DEFAULT_FACTORY_ADDRESS),
+        envAddress("VINUSWAP_OVERRIDABLE_FEE_MANAGER_ADDRESS", DEFAULT_OVERRIDABLE_FEE_MANAGER_ADDRESS),
+        envAddress("VINUSWAP_TIERED_DISCOUNT_ADDRESS", DEFAULT_TIERED_DISCOUNT_ADDRESS),
+        envFlag("VINUSWAP_SET_CONTROLLER_DEFAULT", true)
+    )
+    console.log('Deployment record:', pre.recordPath)
+}
+
+if (require.main === module) {
+    main()
+        .catch((error) => {
+            console.error(error)
+            process.exitCode = 1
+        })
+        .then(() => process.exit())
+}

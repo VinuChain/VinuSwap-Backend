@@ -1,160 +1,154 @@
-import fs from 'fs'
-import { ethers } from "hardhat"
+// Deploys the full VinuSwap core + periphery topology (see deployment_config.example.json).
+// Fee policy matches the live deployment: Controller.defaultFeeManager -> OverridableFeeManager
+// -> NoDiscount by default; VINUSWAP_DEFAULT_DISCOUNT=tiered routes the default to
+// TieredDiscount instead.
+import { ethers } from 'hardhat'
+import { Preflight, assertPeripheryInitCodeHash, loadJsonFile, saveJsonFile } from './preflight'
 
-async function deployCommonContracts(accounts, shares, discountToken, discountThresholds, discounts, WETH) {
-    // Steps:
-    // 1. Deploy Controller
-    // 2. Deploy VinuSwapFactory
-    // 3. Transfer ownership of VinuSwapFactory to Controller
-    // 4. Deploy SwapRouter
-    // 5. Deploy NonfungibleTokenPositionDescriptor
-    // 6. Deploy NonfungiblePositionManager
-    // 7. Deploy TieredDiscount
-    // 8. Deploy VinuSwapQuoter
-    
-    const [deployer] = await ethers.getSigners()
+export const NATIVE_CURRENCY_LABEL = 'VC'
 
-    console.log('Deployer:', deployer.address)
-    console.log('Deployer balance:', (await deployer.getBalance()).toString())
+export interface CoreAddresses {
+    controller: string
+    factory: string
+    router: string
+    positionDescriptor: string
+    positionManager: string
+    noDiscount: string
+    tieredDiscount: string
+    overridableFeeManager: string
+    quoter: string
+}
 
-    // 1. Deploy Controller
-    const controllerBlueprint = await ethers.getContractFactory('Controller')
-    const controllerContract = await controllerBlueprint.deploy(
-        accounts,
-        shares
-    )
-    console.log('Deployed controller to:', controllerContract.address)
+export async function deployCommonContracts(
+    pre: Preflight,
+    accounts: string[],
+    shares: (string | number)[],
+    discountToken: string,
+    discountThresholds: string[],
+    discounts: string[],
+    WETH: string,
+    defaultTickSpacings: Record<string, number> = {},
+    tieredDefault: boolean = process.env.VINUSWAP_DEFAULT_DISCOUNT === 'tiered'
+): Promise<CoreAddresses> {
+    const controller = await pre.deploy('Controller', await ethers.getContractFactory('Controller'), [accounts, shares])
+    const factory = await pre.deploy('VinuSwapFactory', await ethers.getContractFactory('VinuSwapFactory'))
 
-    // 2. Deploy VinuSwapFactory
-    const factoryBlueprint = await ethers.getContractFactory('VinuSwapFactory')
-    const factoryContract = await factoryBlueprint.deploy()
-    console.log('Deployed factory to:', factoryContract.address)
-
-    // 3. Transfer ownership of VinuSwapFactory to Controller
-    await factoryContract.connect(deployer).setOwner(controllerContract.address)
-
-    // 4. Deploy SwapRouter
-    const routerBlueprint = await ethers.getContractFactory('SwapRouter')
-    const routerContract = await routerBlueprint.deploy(factoryContract.address, WETH)
-    console.log('Deployed router to:', routerContract.address)
-
-    // 5. Deploy NonfungibleTokenPositionDescriptor
-
-    // 5.1 Deploy NFTDescriptor
-    const nftDescriptorLibraryBlueprint = await ethers.getContractFactory('NFTDescriptor')
-    const nftDescriptorLibraryContract = await nftDescriptorLibraryBlueprint.deploy()
-    
-    // 5.2 Deploy NonfungibleTokenPositionDescriptor
-    const positionDescriptorBlueprint = await ethers.getContractFactory('NonfungibleTokenPositionDescriptor', {
-        libraries: {
-            NFTDescriptor: nftDescriptorLibraryContract.address
-        }
+    await pre.mutate({
+        label: 'factory.setOwner -> Controller',
+        contract: factory,
+        method: 'setOwner',
+        args: [controller.address],
+        readState: () => factory.owner(),
+        expectedAfter: controller.address,
     })
-    const positionDescriptorContract = await positionDescriptorBlueprint.deploy(
-        WETH,
-        ethers.utils.formatBytes32String('VinuSwap Position')
-    )
-    console.log('Deployed position descriptor to:', positionDescriptorContract.address)
 
-    // 6. Deploy NonfungiblePositionManager
-    const positionManagerBlueprint = await ethers.getContractFactory('NonfungiblePositionManager')
-    const positionManagerContract = await positionManagerBlueprint.deploy(
-        factoryContract.address,
-        WETH,
-        positionDescriptorContract.address
-    )
-    console.log('Deployed position manager to:', positionManagerContract.address)
+    // The factory was deployed from these artifacts a moment ago, so its pool creation code is known.
+    await assertPeripheryInitCodeHash(factory.address, { deployedFromArtifacts: true })
 
-    // 7. Deploy TieredDiscount
-    const tieredDiscountBlueprint = await ethers.getContractFactory('TieredDiscount')
-    const tieredDiscountContract = await tieredDiscountBlueprint.deploy(
+    const router = await pre.deploy('SwapRouter', await ethers.getContractFactory('SwapRouter'), [factory.address, WETH])
+
+    const nftDescriptorLibrary = await pre.deploy('NFTDescriptor', await ethers.getContractFactory('NFTDescriptor'))
+    const positionDescriptor = await pre.deploy(
+        'NonfungibleTokenPositionDescriptor',
+        await ethers.getContractFactory('NonfungibleTokenPositionDescriptor', {
+            libraries: { NFTDescriptor: nftDescriptorLibrary.address },
+        }),
+        [WETH, ethers.utils.formatBytes32String(NATIVE_CURRENCY_LABEL)]
+    )
+    const positionManager = await pre.deploy(
+        'NonfungiblePositionManager',
+        await ethers.getContractFactory('NonfungiblePositionManager'),
+        [factory.address, WETH, positionDescriptor.address]
+    )
+
+    const noDiscount = await pre.deploy('NoDiscount', await ethers.getContractFactory('NoDiscount'))
+    const tieredDiscount = await pre.deploy('TieredDiscount', await ethers.getContractFactory('TieredDiscount'), [
         discountToken,
         discountThresholds,
-        discounts
+        discounts,
+    ])
+    const overridableFeeManager = await pre.deploy(
+        'OverridableFeeManager',
+        await ethers.getContractFactory('OverridableFeeManager'),
+        [tieredDefault ? tieredDiscount.address : noDiscount.address]
     )
-    console.log('Deployed tiered discount to:', tieredDiscountContract.address)
 
-    // 8. Make standard pool creation discount-enabled by default.
-    await controllerContract.connect(deployer).setDefaultFeeManager(factoryContract.address, tieredDiscountContract.address)
-    console.log('Set default fee manager to tiered discount for factory:', factoryContract.address)
+    await pre.mutate({
+        label: 'controller.setDefaultFeeManager -> OverridableFeeManager',
+        contract: controller,
+        method: 'setDefaultFeeManager',
+        args: [factory.address, overridableFeeManager.address],
+        readState: () => controller.defaultFeeManager(factory.address),
+        expectedAfter: overridableFeeManager.address,
+    })
 
-    // 9. Deploy VinuSwapQuoter
-    const quoterBlueprint = await ethers.getContractFactory('VinuSwapQuoter')
-    const quoterContract = await quoterBlueprint.deploy(factoryContract.address, WETH)
+    for (const [fee, tickSpacing] of Object.entries(defaultTickSpacings)) {
+        await pre.mutate({
+            label: `controller.setDefaultTickSpacing fee ${fee}`,
+            contract: controller,
+            method: 'setDefaultTickSpacing',
+            args: [factory.address, Number(fee), tickSpacing],
+            readState: () => controller.defaultTickSpacing(factory.address, Number(fee)),
+            expectedAfter: tickSpacing,
+        })
+    }
 
-    console.log('Deployed quoter to:', quoterContract.address)
-
-    console.log('Deployed common contracts.')
+    const quoter = await pre.deploy('VinuSwapQuoter', await ethers.getContractFactory('VinuSwapQuoter'), [factory.address, WETH])
 
     return {
-        controller: controllerContract.address,
-        factory: factoryContract.address,
-        router: routerContract.address,
-        positionDescriptor: positionDescriptorContract.address,
-        positionManager: positionManagerContract.address,
-        tieredDiscount: tieredDiscountContract.address,
-        quoter: quoterContract.address
+        controller: controller.address,
+        factory: factory.address,
+        router: router.address,
+        positionDescriptor: positionDescriptor.address,
+        positionManager: positionManager.address,
+        noDiscount: noDiscount.address,
+        tieredDiscount: tieredDiscount.address,
+        overridableFeeManager: overridableFeeManager.address,
+        quoter: quoter.address,
     }
 }
 
-function loadJsonFile(path) {
-    const data = fs.readFileSync(path, 'utf8');
-    return JSON.parse(data);
-}
-
-function saveJsonFile(path, data) {
-    const dataStr = JSON.stringify(data, null, 2);
-    fs.writeFileSync(path, dataStr, 'utf8');
-}
-
-function parseLetterNumber(str) {
-    str = str.replace('k', '000');
-    str = str.replace('M', '000000');
-    str = str.replace('B', '000000000');
-    str = str.replace('T', '000000000000');
-    return str
-}
-
-function parseTokenAmount(amount, tokenId, tokenInfos) {
-    const tokenInfo = tokenInfos[tokenId];
-    const tokenAmount = ethers.utils.parseUnits(amount, tokenInfo.decimals);
-    return tokenAmount;
+export function parseLetterNumber(str: string): string {
+    return str.replace('k', '000').replace('M', '000000').replace('B', '000000000').replace('T', '000000000000')
 }
 
 async function main() {
-    const config = loadJsonFile('deployment_config.json');
+    const config = loadJsonFile('deployment_config.json')
+    const pre = await Preflight.create()
 
-    const controllerAccounts = config.controllers.map(controllerPair => controllerPair[0]);
-    const controllerShares = config.controllers.map(controllerPair => controllerPair[1]);
+    const controllerAccounts = config.controllers.map((pair) => pair[0])
+    const controllerShares = config.controllers.map((pair) => pair[1])
+    const discountTokenInfo = config.tokens[config.discountToken]
+    const discountThresholds = config.discounts.map((pair) =>
+        ethers.utils.parseUnits(parseLetterNumber(pair[0]), discountTokenInfo.decimals).toString()
+    )
+    const discounts = config.discounts.map((pair) => Math.round(pair[1] * 10000).toString())
 
-    const discountThresholds = config.discounts.map(
-        thresholdPair => parseTokenAmount(parseLetterNumber(thresholdPair[0]), config.discountToken, config.tokens).toString()
-    );
-    const discounts = config.discounts.map(
-        discountPair => (discountPair[1] * 10000).toFixed(0)
-    );
+    console.log('Controller accounts:', controllerAccounts)
+    console.log('Controller shares:', controllerShares)
+    console.log('Discount thresholds:', discountThresholds)
+    console.log('Discounts (bps):', discounts)
 
-    console.log('Controller accounts:', controllerAccounts);
-    console.log('Controller shares:', controllerShares);
-    console.log('Discount thresholds:', discountThresholds);
-    console.log('Discounts:', discounts);
-
-
-    const results = await deployCommonContracts(
+    config.commonContracts = await deployCommonContracts(
+        pre,
         controllerAccounts,
         controllerShares,
-        config.tokens[config.discountToken].address,
+        discountTokenInfo.address,
         discountThresholds,
         discounts,
-        config.tokens.wvc.address
-    );
+        config.tokens.wvc.address,
+        config.defaultTickSpacings || {}
+    )
 
-    config.commonContracts = results;
-
-    saveJsonFile('deployment_config.json', config);
+    saveJsonFile('deployment_config.json', config)
+    console.log('Deployment record:', pre.recordPath)
 }
 
-main().catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-}).then(() => process.exit());
+if (require.main === module) {
+    main()
+        .catch((error) => {
+            console.error(error)
+            process.exitCode = 1
+        })
+        .then(() => process.exit())
+}

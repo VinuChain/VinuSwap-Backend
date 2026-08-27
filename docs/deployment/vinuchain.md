@@ -12,8 +12,9 @@ The network is already configured in `hardhat.config.ts`:
 networks: {
     vinu: {
         url: process.env.VINUSWAP_RPC_URL || 'https://rpc.vinuchain.org',
-        accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-        chainId: 207
+        // VINUSWAP_OWNER_PRIVATE_KEY, falling back to PRIVATE_KEY (see .env.example)
+        accounts: vinuOwnerPrivateKey ? [vinuOwnerPrivateKey] : [],
+        chainId: 207 // pinned so a wrong RPC cannot sign for another chain
     }
 }
 ```
@@ -43,7 +44,8 @@ async function main() {
     // Discount token address (your protocol token)
     const DISCOUNT_TOKEN = '0x...';
 
-    // Thresholds and discounts
+    // Thresholds and discounts (example values; the live mainnet table is
+    // 100B/500B/1T/5T/10T VINU -> 5/10/25/50/75%, see OWNERSHIP.md)
     const thresholds = [
         ethers.utils.parseEther('1000'),
         ethers.utils.parseEther('10000'),
@@ -165,7 +167,8 @@ async function main() {
         }
     );
 
-    // Native currency label (e.g., "VC" encoded as bytes32)
+    // Native currency label: MUST be "VC". The live descriptor was deployed
+    // with 'VinuSwap Position' here and cannot be changed (see OWNERSHIP.md).
     const nativeCurrencyLabel = ethers.utils.formatBytes32String('VC');
 
     const descriptor = await NonfungibleTokenPositionDescriptor.deploy(
@@ -221,8 +224,10 @@ async function main() {
     console.log('PoolInitHelper:', poolInitHelper.address);
 
     // Get init code hash for address computation
-    const hash = await poolInitHelper.POOL_INIT_CODE_HASH();
+    const hash = await poolInitHelper.getInitCodeHash();
     console.log('Pool init code hash:', hash);
+    // Live factory 0xd74dEe1C...: 0xe8b892178c932bab07f2a26456a3a5e2c79d3301113659dc834ca80e3ea3596e
+    // Any periphery deployed against it must embed that value in PoolAddress.sol.
 }
 ```
 
@@ -347,10 +352,10 @@ async function main() {
     console.log('\n=== DEPLOYMENT COMPLETE ===');
     console.log(JSON.stringify(deployed, null, 2));
 
-    // Save to file
+    // Save to file, then fold the result into docs/deployments/vinuchain-207.json
     const fs = require('fs');
     fs.writeFileSync(
-        'deployments/vinu.json',
+        'docs/deployments/vinuchain-207.new.json',
         JSON.stringify({
             network: 'vinu',
             chainId: 207,
@@ -371,27 +376,13 @@ main()
 
 ## Verification
 
-### Verify on VinuChain Explorer
-
-```bash
-npx hardhat verify --network vinu DEPLOYED_ADDRESS constructor_arg1 constructor_arg2
-```
-
-### Example Verification
-
-```bash
-# Verify TieredDiscount
-npx hardhat verify --network vinu 0x... \
-    "0xDISCOUNT_TOKEN" \
-    "[1000000000000000000000,10000000000000000000000,100000000000000000000000,1000000000000000000000000]" \
-    "[100,200,300,400]"
-
-# Verify Factory (no constructor args)
-npx hardhat verify --network vinu 0x...
-
-# Verify SwapRouter
-npx hardhat verify --network vinu 0x... "0xFACTORY" "0xWVC"
-```
+There is **no** `hardhat verify` target for VinuChain: `hardhat.config.ts` has
+no etherscan/customChains entry for chain 207, and no live contract is
+source-verified. Provenance is recorded instead in
+[`docs/deployments/vinuchain-207.json`](../deployments/vinuchain-207.json)
+(deploy tx, block, deployer nonce, runtime code keccak). Inspect contracts on
+the explorer at `https://vinuexplorer.org/address/<address>` and compare
+`eth_getCode` against the artifact's `deployedBytecode` (metadata stripped).
 
 ## Post-Deployment
 

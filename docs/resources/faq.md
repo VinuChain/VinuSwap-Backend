@@ -22,13 +22,19 @@ VinuSwap extends Uniswap V3 with:
 
 ### What fee tiers are available?
 
-VinuSwap supports standard fee tiers:
+The factory accepts any fee below 100% and any tick spacing in `1..16383`;
+there is no fixed tier table. The Controller owner can create any combination
+with `createPool`. The permissionless `createStandardPool` path works only for
+fees with a non-zero default tick spacing, which on VinuChain today are:
 
 | Fee | Tick Spacing | Use Case |
 |-----|--------------|----------|
 | 500 (0.05%) | 10 | Stable pairs |
 | 3000 (0.30%) | 60 | Standard pairs |
 | 10000 (1.00%) | 200 | Exotic pairs |
+
+100, 2500 and 5000 have default tick spacing 0 (`createStandardPool` reverts).
+Read `pool.tickSpacing()` rather than deriving it from the fee.
 
 ## Swapping
 
@@ -45,8 +51,8 @@ Common reasons:
 ### How do I calculate slippage?
 
 ```javascript
-// Get quote
-const quote = await quoter.quoteExactInputSingle({
+// Get quote (IQuoterV2: non-view, so use callStatic)
+const quote = await quoter.callStatic.quoteExactInputSingle({
     tokenIn,
     tokenOut,
     fee,
@@ -159,45 +165,62 @@ await positionManager.increaseLiquidity({
 
 ### How do fee discounts work?
 
-VinuSwap's TieredDiscount contract reduces fees based on token holdings. Tiers are configured at deployment time. The example values in `scripts/deploy.ts` are:
+VinuSwap's TieredDiscount contract reduces fees based on VINU holdings of
+`tx.origin`. Tiers are contract state (`token()`, `thresholds(i)`,
+`discounts(i)`), not protocol constants. The live TieredDiscount
+(`0x58818859dD0179498c530f549270F40fEB48579E`) is configured as:
 
 ```
-Balance ≥ 1,000,000 tokens → 4% discount
-Balance ≥   100,000 tokens → 3% discount
-Balance ≥    10,000 tokens → 2% discount
-Balance ≥     1,000 tokens → 1% discount
-Balance <     1,000 tokens → No discount
+Balance ≥ 10T VINU  → 75% discount
+Balance ≥  5T VINU  → 50% discount
+Balance ≥  1T VINU  → 25% discount
+Balance ≥ 500B VINU → 10% discount
+Balance ≥ 100B VINU →  5% discount
 ```
+
+**However, it is not routed today:** the live `OverridableFeeManager` default is
+a `NoDiscount` contract (`0xb96178F0517A4E2268B85a76ccFeA7E8382Ca1be`), so
+every current-factory pool charges its base fee. Only the six legacy pools
+(which point at TieredDiscount directly) apply discounts. See
+[OWNERSHIP.md](../OWNERSHIP.md).
 
 ### How do I check my fee discount?
 
 ```javascript
+// Resolve the pool's effective manager first (pool.feeManager() ->
+// OverridableFeeManager.feeManagerOverride(pool) || defaultFeeManager()).
+// If it is a TieredDiscount, computeFeeFor takes an explicit address;
+// computeFee itself uses tx.origin.
 const tieredDiscount = new ethers.Contract(TIERED_DISCOUNT, abi, provider);
-const effectiveFee = await tieredDiscount.computeFee(baseFee);
+const effectiveFee = await tieredDiscount.computeFeeFor(baseFee, myAddress);
 // If baseFee is 3000 and you have 50% discount, effectiveFee is 1500
 ```
 
 ### Where do protocol fees go?
 
-Fees flow to the Controller contract, which can split to multiple recipients:
-
-```javascript
-const controller = await pool.feeReceiver();
-// Controller distributes to configured accounts
-```
+Protocol fees accrue inside each pool (`pool.protocolFees()`) only when
+`slot0.feeProtocol` is non-zero (currently 0 on every current-factory pool).
+The factory owner — the Controller — pulls them with
+`Controller.collectProtocolFees(pool, max0, max1)` and splits them across the
+payee table fixed at construction; payees call `withdraw`. There is no
+`feeReceiver()` on the pool; the receiver is `factory.owner()`.
 
 ## Positions
 
 ### How do I lock a position?
 
 ```javascript
-const unlockTime = Math.floor(Date.now() / 1000) + 86400 * 30; // 30 days
-await positionManager.lock(tokenId, unlockTime);
+const lockedUntil = Math.floor(Date.now() / 1000) + 86400 * 30; // 30 days
+const deadline = Math.floor(Date.now() / 1000) + 300;
+await positionManager.lock(tokenId, lockedUntil, deadline);
 ```
+
+`lockedUntil` must exceed both `block.timestamp` and the current lock; there is
+no maximum. Any approved operator of the NFT can also extend the lock.
 
 ### Can I unlock early?
 
-No, locked positions cannot be unlocked before the specified time. This is by design for vesting or commitment purposes.
+No, locked positions cannot be unlocked before the specified time. This is by design for vesting or commitment purposes. The lock only blocks `decreaseLiquidity`; transfers, `collect`, `increaseLiquidity`, and `burn` (once liquidity and owed tokens are zero) remain allowed.
 
 ### Can I still collect fees from locked positions?
 
@@ -246,8 +269,8 @@ await pool.increaseObservationCardinalityNext(needed);
 
 ```bash
 # Clone and install
-git clone https://github.com/vinuswap/vinuswap-contracts
-cd vinuswap-contracts
+git clone https://github.com/VinuChain/VinuSwap-Backend
+cd VinuSwap-Backend
 npm install
 
 # Compile
@@ -264,14 +287,21 @@ const poolInitHelper = await ethers.getContractAt(
     'PoolInitHelper',
     POOL_INIT_HELPER_ADDRESS
 );
-const hash = await poolInitHelper.POOL_INIT_CODE_HASH();
+const hash = await poolInitHelper.getInitCodeHash(); // the only getter; the constant is internal
 ```
+
+This returns the hash of the **locally compiled** pool
+(`0xabbbd0d1…ea3f` at HEAD). The live VinuChain factory uses
+`0xe8b892178c932bab07f2a26456a3a5e2c79d3301113659dc834ca80e3ea3596e`; see
+[PoolAddress](../reference/libraries/pool-address.md).
 
 ### How do I verify contracts?
 
-```bash
-npx hardhat verify --network vinu CONTRACT_ADDRESS CONSTRUCTOR_ARGS
-```
+You cannot with `hardhat verify`: no verifier is configured for chain 207 and
+no live contract is source-verified. Use the deployment record
+[`docs/deployments/vinuchain-207.json`](../deployments/vinuchain-207.json)
+(deploy tx, block, runtime code keccak) and the explorer
+`https://vinuexplorer.org/address/<address>`.
 
 ## Troubleshooting
 

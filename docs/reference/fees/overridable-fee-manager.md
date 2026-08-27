@@ -146,18 +146,17 @@ const volumeDiscount = await VolumeDiscount.deploy(...);
 // Deploy OverridableFeeManager with tiered as default
 const overridable = await OverridableFeeManager.deploy(tieredDiscount.address);
 
-// Create pools with the overridable manager
-const volatilePool = await factory.createPool(
-    WVC, USDT, 3000, 60, overridable.address
-);
+// Create pools with the overridable manager. The factory is owned by the
+// Controller, so create through it (owner-only; initialises inline). Read the
+// pool address from the PoolCreated event.
+await controller.createPool(factory.address, WVC, USDT, 3000, 60, overridable.address, sqrtPriceX96);
+const volatilePool = await factory.getPool(WVC, USDT, 3000);
 
-const stablePool = await factory.createPool(
-    USDT, TOKEN_C, 100, 1, overridable.address
-);
+await controller.createPool(factory.address, USDT, TOKEN_C, 100, 1, overridable.address, sqrtPriceX96);
+const stablePool = await factory.getPool(USDT, TOKEN_C, 100);
 
-const whalePool = await factory.createPool(
-    WVC, TOKEN_D, 500, 10, overridable.address
-);
+await controller.createPool(factory.address, WVC, TOKEN_D, 500, 10, overridable.address, sqrtPriceX96);
+const whalePool = await factory.getPool(WVC, TOKEN_D, 500);
 
 // Configure overrides
 await overridable.setFeeManagerOverride(stablePool, noDiscount.address);  // No discount for stables

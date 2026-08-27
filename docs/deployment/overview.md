@@ -76,26 +76,32 @@ Phase 4: Pool Creation
 # Install dependencies
 npm install
 
-# Create .env file
+# Create .env file (template lists every variable hardhat.config.ts reads)
 cp .env.example .env
 ```
 
 ### Environment Variables
 
 ```bash
-# .env
-VINUSWAP_RPC_URL=https://rpc.vinuchain.org
-PRIVATE_KEY=your_deployer_private_key
-
-# Optional
-ETHERSCAN_API_KEY=your_api_key_for_verification
+# .env — see .env.example at the repository root
+VINUSWAP_OWNER_PRIVATE_KEY=   # signer for --network vinu (PRIVATE_KEY is the fallback)
+VINUSWAP_RPC_URL=             # defaults to https://rpc.vinuchain.org
 ```
+
+The admin scripts also read `VINUSWAP_CONFIRM`, `VINUSWAP_DEPLOYMENTS_DIR`,
+`VINUSWAP_ALLOW_BYTECODE_MISMATCH`, `VINUSWAP_POOL_FEE_MANAGER`,
+`VINUSWAP_DEFAULT_DISCOUNT` and `COINGECKO_DEMO_API_KEY`; see the
+[rehearsal section of OWNERSHIP.md](../OWNERSHIP.md#rehearsal).
+
+There is no explorer verification key: `hardhat.config.ts` has no verifier
+configured for chain 207.
 
 ### Deployer Account
 
-Ensure the deployer account has sufficient native tokens for gas:
+Ensure the deployer account has sufficient native currency (**VC**) for gas:
 
-- **VinuChain**: Minimum 1000 VINU recommended
+- **VinuChain**: keep a comfortable VC balance; a full deployment is ten
+  contract creations plus configuration transactions
 - **Testnet**: Use faucet to obtain test tokens
 
 ## Quick Deploy
@@ -144,17 +150,20 @@ npx hardhat run scripts/main_scripts/deploy_next_pool.ts --network vinu
 
 ### Post-Deployment
 
-- [ ] Verify all contracts on explorer
-- [ ] Create initial pools
-- [ ] Initialize pools with starting prices
+- [ ] Record every address, deploy tx and block in `docs/deployments/vinuchain-207.json` (no explorer verifier exists for chain 207; compare `eth_getCode` to the artifact instead)
+- [ ] Create initial pools (initialised inline by `createPool` / `createStandardPool`)
 - [ ] Set protocol fees
 - [ ] Test swap on each pool
 - [ ] Test position creation
 - [ ] Update frontend with addresses
 
-## Contract Addresses Template
+## Contract Addresses Record
 
-After deployment, document addresses:
+The mainnet record is
+[`docs/deployments/vinuchain-207.json`](../deployments/vinuchain-207.json)
+(address, deploy block, deploy tx, deployer nonce, runtime code hash, explorer
+link, compiler settings, legacy sets). Extend that file after any new
+deployment. Minimal shape:
 
 ```json
 {
@@ -184,3 +193,29 @@ After deployment, document addresses:
 - [Deploying to VinuChain](vinuchain.md) - Step-by-step deployment
 - [Pool Creation](pool-creation.md) - Creating and initializing pools
 - [Configuration](configuration.md) - Configuring deployed contracts
+
+## Release and Rollback
+
+VinuSwap ships as two independently released layers:
+
+- **Frontend / API (`VinuSwap-Frontend`)** — every push to `main` runs the
+  `quality` job (lint, type check, unit/API/model tests); only a green job fires
+  the Vercel production deploy hook. **Rollback:** promote the previous
+  production deployment in the Vercel dashboard (instant, no build), then revert
+  the offending commit on `main` so the next deploy matches. API routes are
+  stateless apart from MongoDB analytics collections, which the indexer
+  rebuilds idempotently from its stored checkpoints.
+- **Contracts (`VinuSwap-Backend`)** — the deployed generation is immutable and
+  has no rollback. A source change never alters a live contract; fixing
+  deployed behaviour means a new contract generation (see the `Notes for future
+  deployments` and `Source vs deployed bytecode` sections of
+  [`OWNERSHIP.md`](../OWNERSHIP.md)) with a testnet rehearsal, pool and
+  liquidity migration plan, and frontend registry update
+  (`npm run registry:sync` in the frontend) before any user-facing switch.
+  Configuration-only changes (fee policy, `createStandardPool` defaults,
+  protocol-fee split) go through the preflight-guarded scripts in
+  `scripts/main_scripts/` and are reversible with the same scripts.
+
+Record every production change (frontend deploy SHA, contract configuration
+transaction) against the live-state table in `OWNERSHIP.md` and the
+deployment record in [`deployments/vinuchain-207.json`](../deployments/vinuchain-207.json).

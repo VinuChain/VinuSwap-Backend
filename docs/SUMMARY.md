@@ -68,6 +68,8 @@
 * [Deploying to VinuChain](deployment/vinuchain.md)
 * [Pool Creation](deployment/pool-creation.md)
 * [Configuration](deployment/configuration.md)
+* [Ownership & Governance](OWNERSHIP.md)
+* [Mainnet Deployment Record](deployments/vinuchain-207.json)
 
 ## Resources
 

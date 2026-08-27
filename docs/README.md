@@ -111,6 +111,10 @@ Protocol fees can be distributed to multiple accounts with configurable shares t
 | NonfungibleTokenPositionDescriptor | `0xCA04dFDEE5778f6c23a7BdBa46A8D95F5094e4B5` |
 | Controller | `0x47fF80713b1d66DdA47237AB374F3080E2075528` |
 
+Fee-manager addresses, deploy blocks/transactions, code hashes and the legacy
+deployments are in [`deployments/vinuchain-207.json`](deployments/vinuchain-207.json);
+the live ownership and fee-policy state is in [OWNERSHIP.md](OWNERSHIP.md).
+
 ## Security
 
 VinuSwap inherits the battle-tested security of Uniswap V3 with additional security measures:

@@ -286,13 +286,13 @@ Locks a position until a specified timestamp.
 | `deadline` | `uint256` | Transaction deadline |
 
 **Requirements:**
-- Caller must be owner or approved
-- `lockedUntil` must be strictly greater than both `block.timestamp` AND the current `position.lockedUntil`
+- Caller must be owner or approved (an approved operator can extend the lock)
+- `lockedUntil` must be strictly greater than both `block.timestamp` AND the current `position.lockedUntil`; there is no upper bound and no unlock
 
 **Effects:**
-- Position cannot call `decreaseLiquidity()` until lock expires
-- Position cannot call `burn()` until lock expires
-- Position CAN still call `collect()` and `increaseLiquidity()`
+- Position cannot call `decreaseLiquidity()` until `block.timestamp >= lockedUntil` (reverts `'Locked'`)
+- `burn()` is **not** lock-checked: it succeeds whenever liquidity and `tokensOwed` are both zero (a locked position with liquidity cannot reach that state, so it is blocked indirectly)
+- Position CAN still call `collect()` and `increaseLiquidity()`, and the NFT can still be transferred (the lock travels with it)
 
 **Events Emitted:**
 - `Lock(tokenId, lockedUntil)`
@@ -363,6 +363,32 @@ Returns uncollected tokens for a position.
 |------|------|-------------|
 | `tokensOwed0` | `uint128` | Uncollected token0 |
 | `tokensOwed1` | `uint128` | Uncollected token1 |
+
+---
+
+### quoteTokensOwed
+
+```solidity
+function quoteTokensOwed(uint256 tokenId)
+    external
+    returns (
+        uint128 tokensOwed0,
+        uint128 tokensOwed1
+    )
+```
+
+Returns what `tokensOwed` **would** be after poking the pool: it calls
+`pool.burn(tickLower, tickUpper, 0)` to settle fee growth and then recomputes
+the owed amounts (stored `tokensOwed` plus fees accrued since the last
+modification).
+
+- **Non-view.** It mutates pool state in a real transaction; only ever use it
+  through `eth_call` (`callStatic` / `staticCall`). It is unauthenticated and
+  not declared in `INonfungiblePositionManager`; use the concrete ABI.
+- **Reverts `'NP'`** when the position manager's aggregate pool position for
+  that tick range has zero liquidity (e.g. after a full `decreaseLiquidity`
+  before `collect`), because the zero-amount burn requires existing liquidity.
+  Fall back to `tokensOwed(tokenId)` in that case.
 
 ## Events
 

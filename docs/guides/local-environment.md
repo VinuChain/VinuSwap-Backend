@@ -11,8 +11,8 @@ This guide walks through setting up a local development environment for VinuSwap
 ## Clone the Repository
 
 ```bash
-git clone https://github.com/VinuChain/VinuSwap-VinuChain.git
-cd VinuSwap-VinuChain
+git clone https://github.com/VinuChain/VinuSwap-Backend.git
+cd VinuSwap-Backend
 ```
 
 ## Install Dependencies
@@ -71,7 +71,7 @@ npx hardhat run scripts/deploy.ts --network localhost
 ## Project Structure
 
 ```
-VinuSwap-VinuChain/
+VinuSwap-Backend/
 ├── contracts/
 │   ├── core/               # Core pool contracts
 │   │   ├── VinuSwapFactory.sol
@@ -142,12 +142,13 @@ Create a `.env` file:
 # VinuChain RPC endpoint
 VINUSWAP_RPC_URL=https://rpc.vinuchain.org
 
-# Deployer private key (without 0x prefix)
-PRIVATE_KEY=your_private_key_here
-
-# Optional: Etherscan API key for verification
-ETHERSCAN_API_KEY=your_api_key
+# Deployer/owner private key for --network vinu (PRIVATE_KEY is accepted as a fallback)
+VINUSWAP_OWNER_PRIVATE_KEY=
 ```
+
+A template with every variable `hardhat.config.ts` reads is at `.env.example`
+(`cp .env.example .env`). There is no explorer verification key: no verifier is
+configured for chain 207.
 
 ## TypeScript SDK Setup
 

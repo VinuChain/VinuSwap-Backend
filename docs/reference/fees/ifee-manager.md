@@ -52,8 +52,12 @@ This allows:
 | `uint24` | Computed fee in hundredths of a basis point |
 
 **Requirements:**
-- Must be < 1,000,000 (< 100%)
-- Should generally be ≤ input fee (discounts, not surcharges)
+- **Must be ≤ the input `fee`.** The pool enforces `require(actualFee <= fee,
+  'IFV')` on every swap step; a manager that returns more halts all swaps on
+  the pool. Surcharges are impossible, only discounts.
+- May be 0 (100% discount); the pool accepts it and LPs earn nothing.
+- A revert inside `computeFee` reverts the swap. `mint`/`burn`/`collect` never
+  call the manager, so LP withdrawals are unaffected.
 
 ## Implementations
 
@@ -89,10 +93,10 @@ Routes to per-pool managers:
 
 ```solidity
 contract OverridableFeeManager is IFeeManager {
-    function computeFee(uint24 fee) external returns (uint24) {
-        address manager = overrides[msg.sender];
+    function computeFee(uint24 fee) external override nonReentrant returns (uint24) {
+        address manager = feeManagerOverride[msg.sender]; // msg.sender is the pool
         if (manager == address(0)) {
-            manager = defaultManager;
+            manager = defaultFeeManager;
         }
         return IFeeManager(manager).computeFee(fee);
     }
@@ -119,12 +123,16 @@ contract CustomFeeManager is IFeeManager {
 
 ### Example: Time-Based Fees
 
+Only discounts are legal. The multiplier must never exceed 10000 (100%): the
+version below with `peakMultiplier = 12000` would make every peak-hour swap
+revert `'IFV'`.
+
 ```solidity
 contract TimeBasedFeeManager is IFeeManager {
     uint256 public peakStart = 9 hours;   // 9 AM UTC
     uint256 public peakEnd = 17 hours;    // 5 PM UTC
-    uint16 public peakMultiplier = 12000; // 120% during peak
-    uint16 public offPeakMultiplier = 8000; // 80% off-peak
+    uint16 public peakMultiplier = 10000; // 100% during peak (no discount)
+    uint16 public offPeakMultiplier = 8000; // 80% off-peak (20% discount)
 
     function computeFee(uint24 fee) external view override returns (uint24) {
         uint256 timeOfDay = block.timestamp % 1 days;

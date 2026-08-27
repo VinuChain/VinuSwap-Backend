@@ -46,14 +46,20 @@ powers, and the incident runbook.
 
 - [`docs/`](docs/) — GitBook architecture, deployment, and contract reference.
 - `Security Companion Document.pdf` — first-party enumeration of every delta, its
-  rationale, and known concerns.
+  rationale, and known concerns. Dated 2023-09-04; it predates
+  `OverridableFeeManager`, `createStandardPool`, the unified `createPool` +
+  initialise, and `quoteTokensOwed`, so treat `docs/` as authoritative where
+  they differ.
+- [`docs/deployments/vinuchain-207.json`](docs/deployments/vinuchain-207.json) —
+  mainnet deployment record (addresses, deploy txs/blocks, code hashes, legacy
+  sets).
 - [`docs/OWNERSHIP.md`](docs/OWNERSHIP.md) — ownership chain and emergency
   procedures.
 
 # Installing
 
 ```
-git clone https://github.com/Vita-Inu/VinuSwap-VinuChain
+git clone https://github.com/VinuChain/VinuSwap-Backend
 npm install
 ```
 

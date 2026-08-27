@@ -89,12 +89,40 @@ const EXPECTED_DIVERGENT = [
     'interfaces/INonfungiblePositionManager.sol',
 ]
 
+// Top-level VinuSwap contracts with NO upstream counterpart (v3-core 1.0.1 and
+// v3-periphery 1.4.4 do not ship UniswapV3Pool/Factory/NFPM/SwapRouter/QuoterV2
+// sources). Their sha256 is pinned here so accidental drift of the deployed
+// generation's sources fails CI: editing any of them changes bytecode the live
+// deployment (chain 207) was built from -- VinuSwapPool.sol in particular changes
+// the pool init code hash every periphery contract hardcodes.
+//
+// To re-pin after an INTENTIONAL change (a new contract generation), run
+//   node scripts/check_periphery_purity.js --print-fingerprints
+// and paste the printed table here in the same commit as the source change.
+const PINNED_FINGERPRINTS = {
+    'core/VinuSwapPool.sol': '95a2bea253318580bf5fdae7516209a3d2207d6c2f54938dc9dea9b0bee0d1c3',
+    'core/VinuSwapFactory.sol': 'caa62fcc87b2a1b6a7d356da7353308a6137700c15ce25f2a9e6277a4359e3fb',
+    'core/VinuSwapPoolDeployer.sol': 'ac9a0c1d4144e70a2e62298545efab437305a0768615fe366a0101137f630748',
+    'core/NoDelegateCall.sol': 'c2b03bbf6ae73415e9f60fb2bcdad1ee9dbb3ab1f27f9b12384c44d11a5624e0',
+    'periphery/NonfungiblePositionManager.sol': 'cc66b3097eb93f5c1c3859b71fe1d6654c24cb391cfb80a79924a665c1692549',
+    'periphery/SwapRouter.sol': 'e21567333a3159dac43bc666e5837c2e559d7632c5ecae082a1bf1d3c2009a77',
+    'periphery/VinuSwapQuoter.sol': '6ffdf3292f99cba9db26597cbdcef56263f0a1abc74f1a60cb0514207597df2b',
+}
+
 function sourceFingerprint(filePath) {
     const source = fs.readFileSync(filePath, 'utf8').replace(/\r\n/g, '\n')
     return crypto.createHash('sha256').update(source).digest('hex')
 }
 
 function main() {
+    if (process.argv.includes('--print-fingerprints')) {
+        for (const rel of Object.keys(PINNED_FINGERPRINTS)) {
+            const file = path.join(repoRoot, 'contracts', rel)
+            console.log(`    '${rel}': '${fs.existsSync(file) ? sourceFingerprint(file) : 'MISSING'}',`)
+        }
+        return
+    }
+
     if (!fs.existsSync(upstreamRoot)) {
         console.error(
             `Upstream package not found at ${upstreamRoot}.\n` +
@@ -143,6 +171,21 @@ function main() {
         }
     }
 
+    for (const [rel, pinned] of Object.entries(PINNED_FINGERPRINTS)) {
+        const file = path.join(repoRoot, 'contracts', rel)
+        if (!fs.existsSync(file)) {
+            errors.push(`MISSING pinned file: contracts/${rel}`)
+            continue
+        }
+        if (sourceFingerprint(file) !== pinned) {
+            errors.push(
+                `DRIFT: contracts/${rel} no longer matches its pinned fingerprint. This file ` +
+                `is part of the deployed generation; if the change is intentional, re-pin with ` +
+                `--print-fingerprints and document the new generation.`
+            )
+        }
+    }
+
     if (errors.length > 0) {
         console.error('Periphery upstream-purity check FAILED:\n')
         for (const e of errors) {
@@ -154,7 +197,8 @@ function main() {
     console.log(
         `Periphery upstream-purity check OK: ` +
         `${EXPECTED_IDENTICAL.length} files source-identical to ` +
-        `@uniswap/v3-periphery, ${EXPECTED_DIVERGENT.length} documented deltas intact.`
+        `@uniswap/v3-periphery, ${EXPECTED_DIVERGENT.length} documented deltas intact, ` +
+        `${Object.keys(PINNED_FINGERPRINTS).length} deployed-generation sources match their pins.`
     )
 }
 

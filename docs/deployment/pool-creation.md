@@ -38,14 +38,25 @@ async function createPool(
 }
 ```
 
-### Common Pool Configurations
+`createPool` is **owner-only** and initialises the pool inline (a second
+`initialize` call reverts `AI`). Anyone may instead call the permissionless
+`Controller.createStandardPool(factory, tokenA, tokenB, fee, sqrtPriceX96)`,
+which uses the owner-set `defaultFeeManager(factory)` and
+`defaultTickSpacing(factory, fee)`; fees whose default tick spacing is 0 revert
+`Tick spacing not set`. Calling `factory.createPool` or `pool.initialize`
+directly from an EOA reverts because the factory owner is the Controller.
 
-| Pair Type | Fee (bps) | Tick Spacing | Use Case |
-|-----------|-----------|--------------|----------|
-| Stable-Stable | 100 | 1 | Stablecoin pairs |
-| Stable-Major | 500 | 10 | USDT/WVC |
-| Standard | 3000 | 60 | Most pairs |
-| Volatile | 10000 | 200 | Long-tail assets |
+### Live `createStandardPool` defaults (VinuChain 207)
+
+The factory takes any `tickSpacing` in `1..16383`; there is no fee → tick
+spacing table in the contracts. Read `pool.tickSpacing()` for an existing pool.
+
+| Fee | `defaultTickSpacing` | `createStandardPool` |
+|-----|----------------------|----------------------|
+| 500 (0.05%) | 10 | enabled |
+| 3000 (0.3%) | 60 | enabled |
+| 10000 (1%) | 200 | enabled |
+| 100 / 2500 / 5000 | 0 | **disabled** (owner `createPool` only) |
 
 ### Example Pool Creation Script
 
@@ -112,7 +123,8 @@ async function main() {
         console.log(`  Initialized at price ${pool.initialPrice}`);
         deployed[pool.name.replace('/', '_')] = poolAddress;
 
-        // Set protocol fee
+        // Optional protocol fee (0 = off; 4..10 = 25%..10%). Live mainnet pools
+        // on the current factory run with 0.
         await controller.setFeeProtocol(poolAddress, 5, 5);  // 20%
         console.log('  Protocol fee set to 20%');
     }
@@ -167,31 +179,13 @@ const oneToOne = encodePrice(1);
 const wvcUsdt = encodePrice(0.5);
 ```
 
-### Initialize via Controller
+### Initialization happens inside `createPool`
 
-```typescript
-async function initializePool(
-    controller: Contract,
-    poolAddress: string,
-    initialPrice: number
-) {
-    const sqrtPriceX96 = encodePrice(initialPrice);
-    await controller.initialize(poolAddress, sqrtPriceX96);
-}
-```
-
-### Initialize Directly on Pool
-
-```typescript
-async function initializePoolDirect(
-    poolAddress: string,
-    initialPrice: number
-) {
-    const pool = await ethers.getContractAt('VinuSwapPool', poolAddress);
-    const sqrtPriceX96 = encodePrice(initialPrice);
-    await pool.initialize(sqrtPriceX96);
-}
-```
+Both `Controller.createPool` and `createStandardPool` take `sqrtPriceX96` and
+initialise the pool in the same transaction. `Controller.initialize(pool,
+sqrtPriceX96)` exists only for a pool that was somehow created uninitialised;
+calling it on an initialised pool reverts `AI`. `pool.initialize` is
+`onlyFactoryOwner`, so only the Controller can call it.
 
 ## Setting Protocol Fees
 
@@ -313,8 +307,10 @@ async function addInitialLiquidity(
 ) {
     const deadline = Math.floor(Date.now() / 1000) + 3600;
 
-    // Full range for initial liquidity
-    const tickSpacing = fee === 100 ? 1 : fee === 500 ? 10 : fee === 3000 ? 60 : 200;
+    // Full range for initial liquidity; tick spacing is per pool, not per fee
+    const factory = await ethers.getContractAt('VinuSwapFactory', await positionManager.factory());
+    const poolAddress = await factory.getPool(pool.token0, pool.token1, pool.fee);
+    const tickSpacing = await (await ethers.getContractAt('VinuSwapPool', poolAddress)).tickSpacing();
     const tickLower = Math.ceil(-887272 / tickSpacing) * tickSpacing;
     const tickUpper = Math.floor(887272 / tickSpacing) * tickSpacing;
 

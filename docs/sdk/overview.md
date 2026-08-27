@@ -11,7 +11,10 @@ The VinuSwap SDK provides a TypeScript interface for interacting with VinuSwap c
 
 ## Location
 
-The SDK is located in the `sdk/` directory:
+This reference SDK is located in the `sdk/` directory. It is a reference
+implementation; the npm package the frontend runs is `vinuswap-sdk` from a
+separate repository — see [Installation](installation.md) for the behavioural
+differences.
 
 ```
 sdk/

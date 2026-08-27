@@ -117,6 +117,17 @@ export default{
                     details: { yul: false },
                     },
                 }
+            },
+            // Same settings as the factory so the probe hashes the exact pool creation code.
+            "contracts/test/PoolInitCodeHashProbe.sol": {
+                version: "0.7.6",
+                settings: {
+                    optimizer: {
+                    enabled: true,
+                    runs: 1,
+                    details: { yul: false },
+                    },
+                }
             }
         }
         

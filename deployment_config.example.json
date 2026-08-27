@@ -1,0 +1,36 @@
+{
+  "_comment": "Copy to deployment_config.json (untracked). Keys read by scripts/main_scripts/*.ts: deploy_core.ts reads controllers/discounts/discountToken/tokens/defaultTickSpacings and writes commonContracts; deploy_next_pool.ts reads commonContracts/tokens/swapPools/fee/protocolFeeFraction and fills swapPools[].address; deploy_quoter.ts reads commonContracts.factory + tokens.wvc and writes commonContracts.quoter. Env: VINUSWAP_OWNER_PRIVATE_KEY, VINUSWAP_RPC_URL, VINUSWAP_CONFIRM=<target address|yes>, VINUSWAP_DEPLOYMENTS_DIR, VINUSWAP_DEFAULT_DISCOUNT=tiered, VINUSWAP_POOL_FEE_MANAGER, VINUSWAP_ALLOW_BYTECODE_MISMATCH, COINGECKO_DEMO_API_KEY. protocolFeeFraction: 0 or an integer 4..10 (the pool takes 1/N of swap fees), not a decimal.",
+  "controllers": [
+    ["0x0000000000000000000000000000000000000001", 1000]
+  ],
+  "discountToken": "vinu",
+  "discounts": [
+    ["100B", 0.05],
+    ["500B", 0.1],
+    ["1T", 0.25],
+    ["5T", 0.5],
+    ["10T", 0.75]
+  ],
+  "tokens": {
+    "wvc": { "address": "0xEd8c5530a0A086a12f57275728128a60DFf04230", "decimals": 18, "coingeckoId": "vinuchain" },
+    "vinu": { "address": "0x00c1E515EA9579856304198EFb15f525A0bb50f6", "decimals": 18, "coingeckoId": "vita-inu" },
+    "usdt": { "address": "0xC0264277fcCa5FCfabd41a8bC01c1FcAF8383E41", "decimals": 6, "coingeckoId": "tether" }
+  },
+  "defaultTickSpacings": { "500": 10, "3000": 60, "10000": 200 },
+  "fee": 0.003,
+  "protocolFeeFraction": 0,
+  "swapPools": [
+    { "tokenA": "wvc", "tokenB": "usdt", "volatility": "medium" }
+  ],
+  "commonContracts": {
+    "controller": "",
+    "factory": "",
+    "router": "",
+    "positionDescriptor": "",
+    "positionManager": "",
+    "noDiscount": "",
+    "tieredDiscount": "",
+    "overridableFeeManager": "",
+    "quoter": ""
+  }
+}

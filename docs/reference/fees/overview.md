@@ -56,22 +56,30 @@ interface IFeeManager {
 }
 ```
 
-- Called during every swap
-- Can modify the fee dynamically
-- Must return a valid fee (< 1,000,000)
+- Called on every swap step
+- Can **reduce** the fee dynamically
+- Hard invariant enforced by the pool: `actualFee <= fee` (reverts `'IFV'`).
+  A manager can never raise the fee above the pool's immutable `fee`; a
+  manager that tries halts every swap on that pool.
 
 [Full Reference →](ifee-manager.md)
 
 ### TieredDiscount
 
-Balance-based fee discounts:
+Balance-based fee discounts. Tiers are contract state; read them live with
+`token()`, `thresholds(i)`, `discounts(i)`. Live VinuChain table
+(`0x58818859dD0179498c530f549270F40fEB48579E`, token VINU):
 
 ```
-User Balance >= 1,000,000 tokens → 4% fee reduction
-User Balance >= 100,000 tokens  → 3% fee reduction
-User Balance >= 10,000 tokens   → 2% fee reduction
-User Balance >= 1,000 tokens    → 1% fee reduction
+Balance >= 10T  VINU → 75% fee reduction
+Balance >= 5T   VINU → 50% fee reduction
+Balance >= 1T   VINU → 25% fee reduction
+Balance >= 500B VINU → 10% fee reduction
+Balance >= 100B VINU →  5% fee reduction
 ```
+
+This contract is deployed but **not routed** by the live OverridableFeeManager
+(see below).
 
 [Full Reference →](tiered-discount.md)
 
@@ -80,11 +88,14 @@ User Balance >= 1,000 tokens    → 1% fee reduction
 Per-pool fee manager routing:
 
 ```
-Pool A → TieredDiscount
-Pool B → NoDiscount
-Pool C → Custom fee manager
-Default → TieredDiscount
+Pool A → override (any IFeeManager)
+Pool B → override
+Default → defaultFeeManager()
 ```
+
+Live VinuChain (`0xA15770c5692646667c195446996e1fE9D210374c`): no overrides;
+`defaultFeeManager()` = **NoDiscount** `0xb96178F0517A4E2268B85a76ccFeA7E8382Ca1be`,
+so every current-factory pool charges its base fee.
 
 [Full Reference →](overridable-fee-manager.md)
 
@@ -104,24 +115,26 @@ Protocol fee collection and distribution:
 
 ```
 Swap Amount: 1000 USDT
-Pool Fee: 0.3% (3000 bps)
-User Balance: 500,000 discount tokens
+Pool Fee: 0.3% (3000)
+tx.origin balance: 600B VINU (with TieredDiscount routed)
 
 1. Pool calls feeManager.computeFee(3000)
-2. TieredDiscount checks user balance
-   - 500,000 >= 100,000 → 3% discount
-3. Returns: 3000 * 0.97 = 2910 bps (0.291%)
-4. Effective fee: 2.91 USDT (instead of 3 USDT)
+2. TieredDiscount checks tx.origin's VINU balance
+   - 600B >= 500B → 10% discount
+3. Returns: 3000 * 0.90 = 2700 (0.27%)
+4. Effective fee: 2.70 USDT (instead of 3 USDT)
+
+With the live NoDiscount default the pool receives 3000 back unchanged.
 ```
 
 ### 2. Protocol Fee Split
 
 ```
-Swap Fee Collected: 2.91 USDT
-Protocol Fee Setting: 5 (= 1/5 = 20%)
+Swap Fee Collected: 2.70 USDT
+Protocol Fee Setting: 5 (= 1/5 = 20%)   (live current-factory pools: 0 = off)
 
-Protocol portion: 2.91 * 0.20 = 0.582 USDT
-LP portion: 2.91 * 0.80 = 2.328 USDT
+Protocol portion: 2.70 * 0.20 = 0.54 USDT
+LP portion: 2.70 * 0.80 = 2.16 USDT
 ```
 
 ### 3. Fee Distribution
@@ -156,16 +169,22 @@ const overridable = await OverridableFeeManager.deploy(
 );
 ```
 
-2. **Create Pool with Fee Manager:**
+2. **Create Pool with Fee Manager** (through the Controller — the factory's
+   owner — which also initialises the pool; a direct `factory.createPool` from
+   an EOA reverts):
 
 ```javascript
-await factory.createPool(
+await controller.createPool(
+    factory.address,
     tokenA,
     tokenB,
-    3000,               // 0.3% fee
-    60,                 // tick spacing
-    tieredDiscount.address  // fee manager
+    3000,                 // 0.3% fee
+    60,                   // tick spacing (free-form, 1..16383)
+    overridable.address,  // fee manager (immutable per pool)
+    sqrtPriceX96          // initial price; initialised inline
 );
+// or, permissionless, using the owner-set defaults for this fee:
+await controller.createStandardPool(factory.address, tokenA, tokenB, 3000, sqrtPriceX96);
 ```
 
 3. **Configure Controller:**
@@ -180,11 +199,9 @@ const controller = await Controller.deploy(
 ### Setting Protocol Fees
 
 ```javascript
-// Via Controller (if owner)
-await controller.setFeeProtocol(poolAddress, 5, 5);
-
-// Directly on pool (if factory owner)
-await pool.setFeeProtocol(5, 5);  // 20% protocol fee
+// Via Controller (owner only). Accepted per-token values: 0 (off) or 4..10.
+await controller.setFeeProtocol(poolAddress, 5, 5);  // 20% protocol fee
+// pool.setFeeProtocol is onlyFactoryOwner, i.e. callable only by the Controller.
 ```
 
 ### Collecting Fees
@@ -220,15 +237,18 @@ contract NoDiscount is IFeeManager {
 
 ### Custom Fee Managers
 
-Create custom logic by implementing IFeeManager:
+Create custom logic by implementing IFeeManager. The result must satisfy
+`actualFee <= fee`; a surcharge manager is **invalid** — the pool reverts
+`'IFV'` and no swap on that pool can succeed while it is routed:
 
 ```solidity
+// INVALID: returns more than the pool fee during peak hours -> every swap
+// reverts 'IFV' in that window.
 contract TimeBasedFee is IFeeManager {
     function computeFee(uint24 fee) external view returns (uint24) {
-        // Higher fees during peak hours
-        if (block.timestamp % 86400 >= 32400 &&   // 9 AM
-            block.timestamp % 86400 <= 61200) {   // 5 PM
-            return fee * 12 / 10;  // 20% higher
+        if (block.timestamp % 86400 >= 32400 &&
+            block.timestamp % 86400 <= 61200) {
+            return fee * 12 / 10;  // > fee: rejected by the pool
         }
         return fee;
     }
@@ -253,11 +273,14 @@ contract VolumeBasedFee is IFeeManager {
 
 ### Fee Manager Trust
 
-- Fee managers are called during every swap
-- Malicious fee managers could:
-  - Return extremely high fees
-  - Consume excessive gas
-  - Revert to block swaps
+- Fee managers are called on every swap step while the pool is locked (they
+  cannot re-enter the pool)
+- They **cannot** raise fees: the pool enforces `actualFee <= fee` (`'IFV'`)
+- The two real failure modes of a hostile or buggy manager:
+  1. `computeFee` reverts (or returns > fee) → **swaps halt** on affected pools;
+     `mint`/`burn`/`collect` never consult the manager, so LP funds stay
+     withdrawable
+  2. returns 0 (100% discount) → trades continue with **zero LP fee revenue**
 - Only use audited fee manager implementations
 
 ### Protocol Fee Bounds
@@ -268,8 +291,11 @@ contract VolumeBasedFee is IFeeManager {
 ### Controller Access
 
 - Only designated accounts can withdraw their shares
-- Controller owner can add/remove accounts
-- Consider timelock for owner operations
+- The payee table is fixed in the constructor; there is no add/remove/update
+  function. Rotating payees means a new Controller plus
+  `transferFactoryOwnership`
+- Consider timelock for owner operations (the VinuChain deployment uses
+  single-key custody; see [OWNERSHIP.md](../../OWNERSHIP.md))
 
 ## Best Practices
 

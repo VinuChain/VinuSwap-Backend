@@ -25,15 +25,18 @@ VinuSwap defines numerous interfaces for contract interaction.
 | `ISwapRouter` | Swap execution |
 | `INonfungiblePositionManager` | Position NFT management |
 | `INonfungibleTokenPositionDescriptor` | NFT metadata |
-| `IQuoter` | V1-compatible swap quoting |
-| `IQuoterV2` | Swap quoting |
-| `IVinuSwapQuoter` | VinuSwap-specific quoter interface |
+| `IQuoter` | V1-compatible swap quoting (vendored; the deployed quoter does **not** implement it) |
+| `IQuoterV2` | Swap quoting — the interface `VinuSwapQuoter` implements |
+| `IVinuSwapQuoter` | Orphan single-hop interface: not implemented by any contract; do not code against it |
 | `IPeripheryPayments` | Token payments |
 | `IPeripheryPaymentsWithFee` | Payments with fee |
 | `IPeripheryImmutableState` | Immutable state |
 | `IMulticall` | Batch calls |
 | `ISelfPermit` | ERC20 permit |
 | `IERC721Permit` | NFT permit |
+
+Uniswap's `PairFlash` example and `IUniswapV3FlashCallback` are not usable
+here: VinuSwap pools have no `flash()`.
 
 ## Callback Interfaces
 

@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Weekly run so new npm advisories (audit residual guard) and toolchain
+  # regressions surface even when nothing is pushed.
+  schedule:
+    - cron: '0 6 * * 1'
 
 jobs:
   test:
@@ -46,6 +50,12 @@ jobs:
           echo "still failing — purging compiler cache and re-downloading"
           rm -rf ~/.cache/hardhat-nodejs/compilers-v2
           npx hardhat compile || { fix_solc_perms; npx hardhat compile; }
+
+      - name: Contract sizes (EIP-170 headroom)
+        # NFPM and Factory sit within ~300 bytes of the 24576-byte limit; the
+        # hardhat network allows unlimited size, so this is the only visible gauge
+        # (test/vinuswap-deltas.spec.ts fails on any artifact over the limit).
+        run: npx hardhat size-contracts
 
       - name: Periphery upstream-purity check
         # Fails loudly if any vendored @uniswap/v3-periphery file drifts from the

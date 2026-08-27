@@ -13,12 +13,17 @@ three fee-manager patterns:
 - `OverridableFeeManager`: forwards to a default fee manager unless a specific
   pool override is configured.
 
-> **Active default on VinuChain:** `TieredDiscount` is the active default fee
-> manager on the VinuChain deployment. It is set as the default via the
-> `configure:discount-defaults` script (`set_default_discount_fee_manager.ts`),
-> which configures `OverridableFeeManager` to use `TieredDiscount` as its default.
-> Most pools on VinuChain will therefore apply tiered discounts unless a
-> pool-specific override is set.
+> **Live default on VinuChain (block 14680456, 2026-08-27):** every current-factory
+> pool points at `OverridableFeeManager`
+> (`0xA15770c5692646667c195446996e1fE9D210374c`), whose `defaultFeeManager()` is a
+> **`NoDiscount`** deployment at `0xb96178F0517A4E2268B85a76ccFeA7E8382Ca1be`, with
+> no per-pool overrides. **Discounts are therefore inactive on all current pools.**
+> `TieredDiscount` (`0x58818859dD0179498c530f549270F40fEB48579E`, tiers
+> 100B/500B/1T/5T/10T VINU → 5/10/25/50/75%) is deployed but only routed by the
+> six legacy pools. Running `configure:discount-defaults`
+> (`set_default_discount_fee_manager.ts`) would activate it everywhere; that
+> changes live economics and needs explicit confirmation. Always resolve the
+> live manager as shown below rather than assuming either state.
 
 The exact tiers are deployment configuration, not protocol constants. A live UI
 should resolve the pool's effective fee manager before showing a discount.

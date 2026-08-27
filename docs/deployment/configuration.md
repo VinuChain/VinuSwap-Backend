@@ -4,65 +4,36 @@ Post-deployment configuration for VinuSwap contracts.
 
 ## Controller Configuration
 
-### Fee Distribution Setup
+### Fee Distribution
+
+The payee table (`accounts`, `shares`) is passed to the Controller constructor
+and is **fixed for the life of the contract**. There is no `addAccount`,
+`updateShare` or `removeAccount`; rotating payees means deploying a new
+Controller and moving the factory with `transferFactoryOwnership`. Read the
+live table with `accounts(i)` / `shares(account)` / `totalShares()`.
 
 ```typescript
-async function setupFeeDistribution(controller: Contract) {
-    const accounts = [
-        '0x...', // Treasury (40%)
-        '0x...', // Development (30%)
-        '0x...', // Buyback & burn (20%)
-        '0x...'  // Community rewards (10%)
-    ];
-    const shares = [4, 3, 2, 1];
-
-    // If Controller was deployed with different accounts, update
-    // Note: This requires owner access
-
-    console.log('Fee distribution:');
-    for (let i = 0; i < accounts.length; i++) {
-        const percentage = (shares[i] / shares.reduce((a, b) => a + b, 0)) * 100;
-        console.log(`  ${accounts[i]}: ${percentage}%`);
+async function printFeeDistribution(controller: Contract) {
+    const totalShares = await controller.totalShares();
+    for (let i = 0; ; i++) {
+        let account: string;
+        try { account = await controller.accounts(i); } catch { break; }
+        const share = await controller.shares(account);
+        console.log(`  ${account}: ${share.mul(100).div(totalShares)}%`);
     }
 }
 ```
 
-### Managing Accounts
-
-```typescript
-// Add new account
-async function addFeeAccount(
-    controller: Contract,
-    account: string,
-    share: number
-) {
-    await controller.addAccount(account, share);
-    console.log(`Added ${account} with share ${share}`);
-}
-
-// Update share
-async function updateShare(
-    controller: Contract,
-    account: string,
-    newShare: number
-) {
-    await controller.updateShare(account, newShare);
-    console.log(`Updated ${account} to share ${newShare}`);
-}
-
-// Remove account (must withdraw first)
-async function removeFeeAccount(
-    controller: Contract,
-    account: string
-) {
-    await controller.removeAccount(account);
-    console.log(`Removed ${account}`);
-}
-```
+Live mainnet table: a single payee with 1000/1000 shares (see
+[OWNERSHIP.md](../OWNERSHIP.md#live-state-vinuchain-207-block-14680456-2026-08-27)).
 
 ## Fee Manager Configuration
 
 ### TieredDiscount Settings
+
+`updateInfo` replaces the whole tier table. The live mainnet table is read from
+the contract (`token()`, `thresholds(i)`, `discounts(i)`); the values below are
+an example only.
 
 ```typescript
 async function configureTieredDiscount(tieredDiscount: Contract, discountTokenAddress: string) {
@@ -189,7 +160,10 @@ async function transferFeeManagerOwnership(
 
 ### Multi-Sig Setup
 
-For production, consider transferring ownership to a multi-sig:
+The VinuChain deployment uses **single-key custody** (see
+[OWNERSHIP.md](../OWNERSHIP.md)); there is no multisig or timelock in front of
+the owner roles. If you do move ownership to a multisig, verify the target with
+`owner()` afterwards and never call `renounceOwnership`:
 
 ```typescript
 async function setupMultisig(contracts: {
@@ -270,7 +244,7 @@ async function verifyConfiguration(addresses: {
 ### Pre-Launch
 
 - [ ] Factory ownership transferred to Controller
-- [ ] Controller accounts and shares configured
+- [ ] Controller constructor accounts and shares double-checked (immutable after deploy)
 - [ ] TieredDiscount thresholds set appropriately
 - [ ] All pools created with correct parameters
 - [ ] All pools initialized at correct prices
@@ -279,7 +253,7 @@ async function verifyConfiguration(addresses: {
 
 ### Security Review
 
-- [ ] Ownership transferred to multi-sig
+- [ ] Custody model decided and recorded in OWNERSHIP.md (VinuChain: single key)
 - [ ] Fee managers audited
 - [ ] Emergency procedures documented
 - [ ] Monitoring set up

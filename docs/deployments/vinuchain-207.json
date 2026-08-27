@@ -1,0 +1,257 @@
+{
+  "chainId": 207,
+  "network": "VinuChain mainnet",
+  "nativeCurrency": "VC",
+  "rpc": "https://rpc.vinuchain.org",
+  "explorer": "https://vinuexplorer.org",
+  "recordedAt": {
+    "block": 14680456,
+    "timestamp": 1787820441,
+    "date": "2026-08-27",
+    "headCommit": "23ee84175c1dd88c2029ed7bc3d9b477ebc6924f"
+  },
+  "provenanceMethod": "Read-only reconstruction (2026-08-27): every contract below was created by EOA 0x12BD0b15D5010De455DCe7944265Fe1D35a84023; CREATE addresses were matched to deployer nonces locally (cast compute-address), the blocks around the three factory deploys were scanned (cast block --full) and each creation receipt was confirmed (cast receipt: contractAddress + status 0x1). Runtime code hashes are keccak256(eth_getCode). No contract is source-verified on the explorer and hardhat.config.ts has no verifier for chain 207.",
+  "deployer": "0x12BD0b15D5010De455DCe7944265Fe1D35a84023",
+  "owner": {
+    "address": "0x12BD0b15D5010De455DCe7944265Fe1D35a84023",
+    "type": "EOA (code size 0)",
+    "owns": ["Controller", "OverridableFeeManager", "TieredDiscount", "legacy Controller"]
+  },
+  "compiler": {
+    "solc": "0.7.6",
+    "optimizer": { "enabled": true, "runs": 200, "details": { "yul": false } },
+    "overridesRuns1": [
+      "contracts/periphery/NonfungiblePositionManager.sol",
+      "contracts/core/VinuSwapFactory.sol",
+      "contracts/extra/PoolInitHelper.sol"
+    ],
+    "source": "hardhat.config.ts",
+    "note": "HEAD Controller.sol (daf4c76, 2026-06-07) and TieredDiscount.sol (b05e56c, 2026-06-05, adds require(_token != address(0)) to updateInfo) postdate the deployed bytecode; a HEAD compile does not reproduce those two contracts. Router/NFPM/Quoter differ from HEAD artifacts only in the PoolAddress.POOL_INIT_CODE_HASH constant and immutables."
+  },
+  "poolInitCodeHash": {
+    "live": "0xe8b892178c932bab07f2a26456a3a5e2c79d3301113659dc834ca80e3ea3596e",
+    "localBuild": "0xabbbd0d15b71abfbaad4b7a124f1070d10b298946137a0f9178c1a8d09b9ea3f",
+    "note": "Only the live hash reproduces factory 0xd74dEe1C... pool addresses (CREATE2 check against 0x2f50d5E1... and 0x5174703D...); the local value is what contracts/periphery/libraries/PoolAddress.sol pins for the test build. Legacy factories embed different pool bytecode and match neither."
+  },
+  "tokens": [
+    { "symbol": "WVC", "name": "Wrapped VC", "decimals": 18, "address": "0xEd8c5530a0A086a12f57275728128a60DFf04230", "note": "WETH9-style; WETH9() of every router/NFPM/quoter" },
+    { "symbol": "VINU", "name": "Vita Inu", "decimals": 18, "address": "0x00c1E515EA9579856304198EFb15f525A0bb50f6", "note": "TieredDiscount.token()" },
+    { "symbol": "USDT", "name": "USDT@VinuChain", "decimals": 6, "address": "0xC0264277fcCa5FCfabd41a8bC01c1FcAF8383E41" },
+    { "symbol": "ETH", "name": "ETH@VinuChain", "decimals": 18, "address": "0xDd4b9b3Ce03faAbA4a3839c8B5023b7792be6e2C" },
+    { "symbol": "BTC", "name": "BTC@VinuChain", "decimals": 8, "address": "0x69120197b77b51d32fFA5eAfe16b3D78115640c6", "note": "totalSupply 0 at record time" }
+  ],
+  "contracts": [
+    {
+      "name": "Controller",
+      "address": "0x47fF80713b1d66DdA47237AB374F3080E2075528",
+      "explorer": "https://vinuexplorer.org/address/0x47fF80713b1d66DdA47237AB374F3080E2075528",
+      "deployBlock": 3198207,
+      "deployTx": "0x0398855d8886b31d9551c50895bd4f23fd752c7ec150311531a1c38f547e3050",
+      "deployerNonce": 251,
+      "deployedAt": "2024-12-05T23:09:05Z",
+      "runtimeCodeKeccak": "0xdbf89e7712e9e1ded9ca8fc1a29bdd1f1847edca4885a874e45a1133f392877b",
+      "runtimeCodeSize": 8006,
+      "sourceMatchesHead": false,
+      "note": "Payees fixed at construction: [0xA529d46D97C9be7b93F44A9A0Ca4672C4591B93a] shares [1000]. HEAD Controller.sol postdates deployment (4727 differing bytes vs artifact)."
+    },
+    {
+      "name": "VinuSwapFactory",
+      "address": "0xd74dEe1C78D5C58FbdDe619b707fcFbAE50c3EEe",
+      "explorer": "https://vinuexplorer.org/address/0xd74dEe1C78D5C58FbdDe619b707fcFbAE50c3EEe",
+      "deployBlock": 3198208,
+      "deployTx": "0xf44934a80bae43829b26dedacac0dcadbd6763f34c63b86f2c5aef2d78e17d8a",
+      "deployerNonce": 252,
+      "runtimeCodeKeccak": "0x021ee6fb4ac189c69888fd2149416c1b0b40e2715775669371e4e83da16c9455",
+      "runtimeCodeSize": 24468,
+      "sourceMatchesHead": true,
+      "ownerChangedTo": { "address": "0x47fF80713b1d66DdA47237AB374F3080E2075528", "block": 3198209, "tx": "0x58adc13ab7c4438bc39c925e83b05dc5cc7fd0d782c021b7de630c9a1931424f" },
+      "note": "Differs from the HEAD artifact only in the NoDelegateCall immutable and two CBOR metadata hashes."
+    },
+    {
+      "name": "SwapRouter",
+      "address": "0x48f450475a8b501A7480C1Fd02935a7327F713Ad",
+      "explorer": "https://vinuexplorer.org/address/0x48f450475a8b501A7480C1Fd02935a7327F713Ad",
+      "deployBlock": 3198211,
+      "deployTx": "0x57338d00d75287d0d24129103f0c9cd7be48953a223c9748edb6334950aab21c",
+      "deployerNonce": 254,
+      "runtimeCodeKeccak": "0x721795153f65179b6ab6671f337d8ca43994a865779afd36a6e698cec2b400e5",
+      "runtimeCodeSize": 10636,
+      "sourceMatchesHead": false,
+      "note": "Embeds live init code hash 0xe8b8...; HEAD PoolAddress.sol pins 0xabbb.... Otherwise consistent (272 differing bytes = constant + immutables)."
+    },
+    {
+      "name": "NFTDescriptor (library)",
+      "address": "0x5F8B62BB7C255196bF58CabD62B7b37B0C1c20d1",
+      "explorer": "https://vinuexplorer.org/address/0x5F8B62BB7C255196bF58CabD62B7b37B0C1c20d1",
+      "deployBlock": 3198212,
+      "deployTx": "0xf6de1055ef73e8ffd2b08c314a35baa8a218f6d61c299693cdd37e655c99852b",
+      "deployerNonce": 255,
+      "runtimeCodeKeccak": null,
+      "runtimeCodeSize": 24013,
+      "sourceMatchesHead": null,
+      "note": "Linked into NonfungibleTokenPositionDescriptor; not byte-compared."
+    },
+    {
+      "name": "NonfungibleTokenPositionDescriptor",
+      "address": "0xCA04dFDEE5778f6c23a7BdBa46A8D95F5094e4B5",
+      "explorer": "https://vinuexplorer.org/address/0xCA04dFDEE5778f6c23a7BdBa46A8D95F5094e4B5",
+      "deployBlock": 3198213,
+      "deployTx": "0xe7105d7333794c446ad2b9223611c55dcf15943a081cdf4db6566ca5b4f014c7",
+      "deployerNonce": 256,
+      "runtimeCodeKeccak": "0x55446110a38f04ccde6a37bd2346c9186c7464cd4a06fa4ef9ec2d0084a2fb3c",
+      "runtimeCodeSize": 5412,
+      "sourceMatchesHead": null,
+      "note": "Immutable defect: nativeCurrencyLabel() = 'VinuSwap Position' (should be 'VC'); tokenURI names carry 'Uniswap' branding; tokenURI reverts for USDT/WVC positions. Library-linked artifact not byte-comparable."
+    },
+    {
+      "name": "NonfungiblePositionManager",
+      "address": "0xF699ec0764741f66F81068665eFFAeefA3c6037a",
+      "explorer": "https://vinuexplorer.org/address/0xF699ec0764741f66F81068665eFFAeefA3c6037a",
+      "deployBlock": 3198215,
+      "deployTx": "0xd4548c9738fe0e4edb8f4e2e59f1925fba0abd84b137fbd0fe991a85000e5779",
+      "deployerNonce": 257,
+      "runtimeCodeKeccak": "0x8bb29ff4d2d628c268b201668761479bda10218590e073b215a97aaa45fcb406",
+      "runtimeCodeSize": 24306,
+      "sourceMatchesHead": false,
+      "note": "Embeds live init code hash 0xe8b8...; otherwise consistent with HEAD (376 differing bytes = constant + immutables). 24306 B of the 24576 B EIP-170 limit."
+    },
+    {
+      "name": "TieredDiscount (second deployment, unreferenced)",
+      "address": "0xE86FA507cb7E4E16DA7377baf70845D0016F65E3",
+      "explorer": "https://vinuexplorer.org/address/0xE86FA507cb7E4E16DA7377baf70845D0016F65E3",
+      "deployBlock": 3198216,
+      "deployTx": "0x5ef9bc78909b599d237303441bdf88eda82b122f3f15e99186bef75c8a043721",
+      "deployerNonce": 258,
+      "runtimeCodeKeccak": "0xb700cbecf960df9aa01a6784fe3c922f145e0cb8e4109afcf51f5a0628b6ad29",
+      "runtimeCodeSize": 2945,
+      "sourceMatchesHead": null,
+      "note": "token()=VINU, owner()=deployer, thresholds(0)=1e29 / discounts(0)=500. Not routed by OverridableFeeManager and not referenced by any script; listed as an owner decision item in docs/OWNERSHIP.md. Full tier table not read."
+    },
+    {
+      "name": "NoDiscount",
+      "address": "0xb96178F0517A4E2268B85a76ccFeA7E8382Ca1be",
+      "explorer": "https://vinuexplorer.org/address/0xb96178F0517A4E2268B85a76ccFeA7E8382Ca1be",
+      "deployBlock": 3198217,
+      "deployTx": "0x39677e1303eeeeedb950e5221fcebe7c826b975c8a428bf8f63f5ecb58b68eba",
+      "deployerNonce": 259,
+      "runtimeCodeKeccak": "0x6aba98bfbf71b5ab683ffb114c2e2ede992f9e0ca2c416aa12b44f06afbe12aa",
+      "runtimeCodeSize": 157,
+      "sourceMatchesHead": true,
+      "note": "Byte-identical (including metadata) to artifacts NoDiscount.json deployedBytecode. This is the LIVE default fee manager: OverridableFeeManager.defaultFeeManager() == this address, so VINU discounts are inactive on all current-factory pools."
+    },
+    {
+      "name": "OverridableFeeManager",
+      "address": "0xA15770c5692646667c195446996e1fE9D210374c",
+      "explorer": "https://vinuexplorer.org/address/0xA15770c5692646667c195446996e1fE9D210374c",
+      "deployBlock": 3198218,
+      "deployTx": "0xad48d12adeb0b8ace1d035eec81a2b0657f8284054ba9303233ec3c3d16b39d8",
+      "deployerNonce": 260,
+      "runtimeCodeKeccak": "0xda388597d4f172c552bc4cd3be5daa5bcdca12e19f90be254e4edf192a8ff936",
+      "runtimeCodeSize": 1712,
+      "sourceMatchesHead": true,
+      "note": "defaultFeeManager() = NoDiscount 0xb961...; feeManagerOverride(pool) = 0x0 for every pool. Controller.defaultFeeManager(factory) = this address."
+    },
+    {
+      "name": "VinuSwapQuoter",
+      "address": "0xEed635Fa2343355d9bA726C379F2B5dEa70fE65C",
+      "explorer": "https://vinuexplorer.org/address/0xEed635Fa2343355d9bA726C379F2B5dEa70fE65C",
+      "deployBlock": 3198223,
+      "deployTx": "0x927715595a2ec0d98e17c9bbc129e5154f4d5917afd1a91983c94b785c991983",
+      "deployerNonce": 263,
+      "runtimeCodeKeccak": "0xbd0be5933eb0d903d46cc0f407dcd55220208a576da6f953eb324add64b28816",
+      "runtimeCodeSize": 7551,
+      "sourceMatchesHead": false,
+      "note": "Implements IQuoterV2 (struct params). Embeds live init code hash 0xe8b8...; otherwise consistent with HEAD (112 differing bytes)."
+    },
+    {
+      "name": "TieredDiscount",
+      "address": "0x58818859dD0179498c530f549270F40fEB48579E",
+      "explorer": "https://vinuexplorer.org/address/0x58818859dD0179498c530f549270F40fEB48579E",
+      "deployBlock": 1047544,
+      "deployTx": "0x08c7c1e519173c6da992c1cdcd1bc8be28b2ebace1e8307f28d83435122707fd",
+      "deployerNonce": 91,
+      "deployedAt": "2024-06-28",
+      "runtimeCodeKeccak": "0x154613ccacb7a9c333b1c24975b563c6e6ab99e76b74441504113e9374864c72",
+      "runtimeCodeSize": 2945,
+      "sourceMatchesHead": false,
+      "liveConfig": {
+        "token": "0x00c1E515EA9579856304198EFb15f525A0bb50f6",
+        "tiers": [
+          { "thresholdWei": "100000000000000000000000000000", "vinu": "100B", "discountBps": 500 },
+          { "thresholdWei": "500000000000000000000000000000", "vinu": "500B", "discountBps": 1000 },
+          { "thresholdWei": "1000000000000000000000000000000", "vinu": "1T", "discountBps": 2500 },
+          { "thresholdWei": "5000000000000000000000000000000", "vinu": "5T", "discountBps": 5000 },
+          { "thresholdWei": "10000000000000000000000000000000", "vinu": "10T", "discountBps": 7500 }
+        ]
+      },
+      "note": "Deployed with the 2024-06 legacy generation and reused. NOT routed by the current OverridableFeeManager (inactive on current pools); the six legacy pools point at it directly. HEAD TieredDiscount.sol adds a zero-token guard that this bytecode lacks."
+    }
+  ],
+  "controllerState": {
+    "factoryOwner": "0x47fF80713b1d66DdA47237AB374F3080E2075528",
+    "payees": [{ "account": "0xA529d46D97C9be7b93F44A9A0Ca4672C4591B93a", "shares": 1000 }],
+    "totalShares": 1000,
+    "defaultFeeManager": "0xA15770c5692646667c195446996e1fE9D210374c",
+    "defaultTickSpacing": { "500": 10, "3000": 60, "10000": 200, "100": 0, "2500": 0, "5000": 0 },
+    "ledgerBalances": "0 for the payee in WVC/USDT/VINU/ETH/BTC",
+    "poolCreatedEvents": 35,
+    "setFeeProtocolEvents": 0
+  },
+  "pools": {
+    "note": "35 pools created via Controller.PoolCreated on the current factory; all feeManager = OverridableFeeManager, feeProtocol = 0, observationCardinality = 1. 25 have zero liquidity. Enumerate with Controller PoolCreated logs (topic 0x260d4c88...) or factory.getPool.",
+    "withLiquidity": [
+      { "address": "0x2f50d5E141A5B9F148187008DE4795A4Be407112", "pair": "USDT/WVC", "fee": 3000, "tickSpacing": 60 },
+      { "address": "0x5174703D6Ae67c044459bC41E55019A03b52B9cC", "pair": "VINU/WVC", "fee": 10000, "tickSpacing": 200 },
+      { "address": "0xD83BcAC4bbD0Ae141f4ADC8b68a9DA3FAd295D70", "pair": "VIN/WVC", "fee": 10000 },
+      { "address": "0xB03226E7a1a9b2CAe365d1800cfa95D47d36AF57", "pair": "VIN/WVC", "fee": 3000 },
+      { "address": "0xa72B608719b9E0602a9106877561a22d4BdF3A50", "pair": "VINU/VIN", "fee": 10000 },
+      { "address": "0x8FA509030Ea314Af24bc3Bd5D7AB6bDD81cdbe5A", "pair": "VIR/USDT", "fee": 3000 },
+      { "address": "0xb5A8F3eF5F891E6473fd4fF29b5aC545c87e7B43", "pair": "VIR/WVC", "fee": 3000 },
+      { "address": "0xDD5fe2604EF465dC3F3E1ef78bBFD45aB9517762", "pair": "VIN/VIR", "fee": 10000 },
+      { "address": "0xd93fdA8e8a5027C0Be24d0ad62ee4683ce027a2A", "pair": "VINU/VIR", "fee": 3000 },
+      { "address": "0x8CaDD87154b69DE759D9Ac8C5294206a82E4E393", "pair": "TEST/WVC", "fee": 10000, "note": "TEST token is frontend-blacklisted" }
+    ],
+    "documentedZeroLiquidity": [
+      { "address": "0x4B9570E80cC1b08089D50E4EF946E6fE7c7f070d", "pair": "VINU/USDT", "fee": 500, "tickSpacing": 10 }
+    ]
+  },
+  "legacy": [
+    {
+      "generation": "2024-06 (legacy set 1)",
+      "deployedAt": "2024-06-28T01:47:21Z",
+      "owner": "0x12BD0b15D5010De455DCe7944265Fe1D35a84023",
+      "contracts": [
+        { "name": "Controller (old ABI)", "address": "0x4bC45A5db58d4535FaF668F392035407d2a14E76", "deployBlock": 1047537, "deployTx": "0x78347d63840f9c33e143a6964c7e13581d5892b665cbcf822fc2ccb6291014b5", "deployerNonce": 84, "runtimeCodeKeccak": "0x1285e7e7819e1996d49ff41ec1e1cc88d192a5e757559379f34f46a885b84882", "runtimeCodeSize": 6122, "note": "Payee 0xA529d46D97C9be7b93F44A9A0Ca4672C4591B93a shares 1000/1000; owns both legacy factories; no defaultFeeManager getter" },
+        { "name": "VinuSwapFactory", "address": "0x822F75e07E54C7168C7b962fC5155c77A91b5939", "deployBlock": 1047538, "deployTx": "0x6aedac021b5e6d7ee40fb54252cc11774aee2c7e6394a6860e9306665ad968cd", "deployerNonce": 85, "runtimeCodeKeccak": "0xee3830379cac81ab6e0f5388b08e891babc7a091910c63845968490c93c1c6af", "runtimeCodeSize": 24468, "ownerChangedTo": { "address": "0x4bC45A5db58d4535FaF668F392035407d2a14E76", "block": 1047539, "tx": "0x3bb070538a8047ac030ab0397fd4a3c48bcb6522b5d943ffc3325d9a4b3e4368" } },
+        { "name": "SwapRouter", "address": "0xdd9fE9159221f02FE24d0D325D865220714E19f9", "deployBlock": 1047540, "deployTx": "0x28eb419c090d764761ae6c4126728041882b9eb643c36b8629ec7187d5dc554a", "deployerNonce": 87, "runtimeCodeKeccak": "0x286e0c892b450367c0f044e2b7edf70d83c5d907c84a1ddb273c40af867e130a" },
+        { "name": "NFTDescriptor (library)", "address": "0x017866C5d015a3dA4E997940E6B20c32B66F9eD7", "deployBlock": 1047541, "deployTx": "0x2859472a7970dfa72871b66f64d7262a6623ef717460800a8aa942d1d26f7cd0", "deployerNonce": 88, "runtimeCodeKeccak": null },
+        { "name": "NonfungibleTokenPositionDescriptor", "address": "0x749a4ae26eA2B656321fE299c87f94Fa25703741", "deployBlock": 1047542, "deployTx": "0x0c2972c5fd94096b972b3431304785cde088ffd76177f81619499e30593b8a27", "deployerNonce": 89, "runtimeCodeKeccak": "0xa35b709de61b14bdcfaafbe4d5ade7da1439a5b46919aac41937092d1c06b000" },
+        { "name": "NonfungiblePositionManager", "address": "0xdF6894C78D729A8cFa09574A41f5F0835629B33c", "deployBlock": 1047543, "deployTx": "0x73f3b85d9ab4aa8e272b40845ab1fcd19f1c2e97fb666f6b11b332f9503617bf", "deployerNonce": 90, "runtimeCodeKeccak": "0x3af3547aeb26583ef16a7b0f3c00b48d2be501067d8f49fc35671a1363a10064", "note": "totalSupply 20" },
+        { "name": "TieredDiscount", "address": "0x58818859dD0179498c530f549270F40fEB48579E", "deployBlock": 1047544, "deployTx": "0x08c7c1e519173c6da992c1cdcd1bc8be28b2ebace1e8307f28d83435122707fd", "deployerNonce": 91, "note": "Shared with the current generation; see contracts[]" },
+        { "name": "VinuSwapQuoter", "address": "0x6767A6c094C66Aab096e4f2E0d6ab9592458eC79", "deployBlock": 1047545, "deployTx": "0x1bc6690c124eafc7ce3c8571c0c8ef1dfe936fd171be5423333a20cc7d3da81c", "deployerNonce": 92, "runtimeCodeKeccak": "0x699ed856e0a0bc7997ed02876017fc1dd28596741a50f539cb42ff30e6381b35" }
+      ],
+      "pools": [
+        { "address": "0xa97FA6E9A764306107F2103a2024Cfe660c5dA33", "pair": "USDT/WVC", "fee": 2500, "tickSpacing": 200, "feeManager": "0x58818859dD0179498c530f549270F40fEB48579E", "feeProtocol": "5/5 (20%)", "uncollectedProtocolFeesRaw": { "token0": "21692505", "token1": "11771087947025251324015" } },
+        { "address": "0xfD763943f628e125CEE3D8d85DC0fc7098355d16", "pair": "VINU/ETH", "fee": 2500, "feeManager": "0x58818859dD0179498c530f549270F40fEB48579E", "feeProtocol": "5/5 (20%)", "uncollectedProtocolFeesRaw": { "token0": "7155778280743868223502", "token1": "1467594560624" } },
+        { "address": "0x8d713bC2d35327B536A8B2CCec9392e57C0D04B4", "pair": "ETH/WVC", "fee": 2500, "feeManager": "0x58818859dD0179498c530f549270F40fEB48579E", "feeProtocol": "5/5 (20%)", "uncollectedProtocolFeesRaw": { "token0": "1283362686", "token1": "743934028702408568" } },
+        { "address": "0xd50ee26F62B1825d14e22e23747939D96746434c", "pair": "VINU/WVC", "fee": 2500, "feeManager": "0x58818859dD0179498c530f549270F40fEB48579E", "feeProtocol": "5/5 (20%)", "uncollectedProtocolFeesRaw": { "token0": "881429562461374436095625874", "token1": "1775285173611367441088" } },
+        { "address": "0x3AefC7Ff49ad0CB62A71BFF3DA8444BA1eA7b9EA", "pair": "VINU/USDT", "fee": 2500, "tickSpacing": 60, "feeManager": "0x58818859dD0179498c530f549270F40fEB48579E", "feeProtocol": "5/5 (20%)", "liquidity": "0", "status": "retired; not in frontend config", "uncollectedProtocolFeesRaw": { "token0": "1040794509086792692352", "token1": "8425" } }
+      ]
+    },
+    {
+      "generation": "2024-09 (legacy set 2)",
+      "deployedAt": "2024-09-04T10:42:33Z",
+      "owner": "0x12BD0b15D5010De455DCe7944265Fe1D35a84023",
+      "controller": "0x4bC45A5db58d4535FaF668F392035407d2a14E76",
+      "contracts": [
+        { "name": "VinuSwapFactory", "address": "0x9070A6cf592C2602A5d1DA35fc656577f42454C5", "deployBlock": 1697948, "deployTx": "0xa674dbd308445bccde02e00b67968c84945ebe077a8d886057086276f7684747", "deployerNonce": 204, "runtimeCodeKeccak": "0xc0ff7f8841b5794d4a785ff512ff449a83cdbfce4cde31aea81a361b1ff1e9ed", "runtimeCodeSize": 24468, "ownerChangedTo": { "address": "0x4bC45A5db58d4535FaF668F392035407d2a14E76", "block": 1697949, "tx": "0x76b91bf076ce74ecc39e41e514a0e961bd1955046ffab17227109229810179c3" } },
+        { "name": "SwapRouter", "address": "0xadcc675ed0D1848B0809Ffd30dEb69A7cA758260", "deployBlock": 1697951, "deployTx": "0x9539d1c54222a7ba352550ad911842694bd565b90c5b3a4d04110bdab01435b0", "deployerNonce": 206, "runtimeCodeKeccak": "0xa8924f77e52123cb33934421cad83dbc1301beb8324e619d6e362f16124fdcb3" },
+        { "name": "NonfungiblePositionManager", "address": "0xa2Bb7D3ccc2E0C8827cf5f5225FB5474d99ADa2A", "deployBlock": 1697952, "deployTx": "0x1915a5157598d4ebf5ffc7a6f549e48179537261c9f6fcb654c75e7bc85b04a6", "deployerNonce": 207, "runtimeCodeKeccak": "0x44904712c9bb0984a4b8849236db32fe44d091b12b2c3a21be3929a04f961e3d", "note": "totalSupply 3" },
+        { "name": "VinuSwapQuoter", "address": "0x6998580Bf1979Cb4eD881a93678B97717d54cA51", "deployBlock": 1697953, "deployTx": "0x01fd66948d8030d4d61ac5753ed6718277fcca775ea2a29e42b69e53fdde94ec", "deployerNonce": 208, "runtimeCodeKeccak": "0x89b35e0c642aac09bf940ce3e1da88cf1a70d3344a13105c2bd33afeaa661282" }
+      ],
+      "pools": [
+        { "address": "0x3424b0dd7715C8db92414DB0c5A9E5FA0D51cCb5", "pair": "VINU/USDT", "fee": 2500, "tickSpacing": 200, "feeManager": "0x58818859dD0179498c530f549270F40fEB48579E", "feeProtocol": "5/5 (20%)", "uncollectedProtocolFeesRaw": { "token0": "689270141836927469818730372", "token1": "9782401" } }
+      ]
+    }
+  ]
+}

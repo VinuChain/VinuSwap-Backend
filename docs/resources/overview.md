@@ -30,7 +30,7 @@ Frequently asked questions covering:
 
 ### VinuSwap Security
 
-A [Security Companion Document](https://github.com/VinuChain/VinuSwap-VinuChain/blob/main/Security%20Companion%20Document.pdf) covering VinuSwap's extensions (Controller, TieredDiscount, fee manager system, position locking) is included in the repository root.
+A [Security Companion Document](https://github.com/VinuChain/VinuSwap-Backend/blob/main/Security%20Companion%20Document.pdf) covering VinuSwap's extensions (Controller, TieredDiscount, fee manager system, position locking) is included in the repository root. It is dated 2023-09-04 and predates `OverridableFeeManager`, `createStandardPool`, the unified `createPool`, and `quoteTokensOwed`.
 
 ### Uniswap V3 Documentation
 
@@ -66,6 +66,13 @@ VinuSwap is based on Uniswap V3. These resources provide additional context:
 | VinuSwapQuoter | `0xEed635Fa2343355d9bA726C379F2B5dEa70fE65C` |
 | NonfungibleTokenPositionDescriptor | `0xCA04dFDEE5778f6c23a7BdBa46A8D95F5094e4B5` |
 | Controller | `0x47fF80713b1d66DdA47237AB374F3080E2075528` |
+| OverridableFeeManager | `0xA15770c5692646667c195446996e1fE9D210374c` |
+| NoDiscount (live default policy) | `0xb96178F0517A4E2268B85a76ccFeA7E8382Ca1be` |
+| TieredDiscount (deployed, not routed) | `0x58818859dD0179498c530f549270F40fEB48579E` |
+
+Deploy blocks, transaction hashes and legacy deployments:
+[`docs/deployments/vinuchain-207.json`](../deployments/vinuchain-207.json).
+Explorer: `https://vinuexplorer.org/address/<address>`.
 
 ### VinuChain Testnet
 
@@ -113,7 +120,8 @@ Contributions to VinuSwap are welcome:
 ## License
 
 VinuSwap contracts are licensed under:
-- Core contracts: GPL-2.0-or-later
+- Core contracts: BUSL-1.1
 - Periphery contracts: GPL-2.0-or-later
+- Custom extensions: MIT
 
 See individual contract files for specific licenses.

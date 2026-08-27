@@ -8,7 +8,7 @@ Security best practices and considerations for VinuSwap integration.
 
 VinuSwap is based on Uniswap V3, one of the most thoroughly audited DeFi protocols. The core AMM logic inherits security properties from the battle-tested Uniswap V3 codebase.
 
-A [Security Companion Document](https://github.com/VinuChain/VinuSwap-VinuChain/blob/main/Security%20Companion%20Document.pdf) specific to VinuSwap's extensions (Controller, TieredDiscount, fee manager system, position locking) is included in the repository root.
+A [Security Companion Document](https://github.com/VinuChain/VinuSwap-Backend/blob/main/Security%20Companion%20Document.pdf) specific to VinuSwap's extensions (Controller, TieredDiscount, fee manager system, position locking) is included in the repository root. It is dated 2023-09-04 and predates `OverridableFeeManager`, `createStandardPool`, the unified `createPool` + initialise, and `quoteTokensOwed`; the live ownership graph is in [OWNERSHIP.md](../OWNERSHIP.md).
 
 ### Key Security Features
 
@@ -59,8 +59,11 @@ const params = {
     // ...
 };
 
-// SAFE - With slippage protection
-const expectedOut = await quoter.quoteExactInputSingle(...);
+// SAFE - With slippage protection. VinuSwapQuoter implements IQuoterV2:
+// struct params, non-view (use callStatic / staticCall), tuple result.
+const { amountOut: expectedOut } = await quoter.callStatic.quoteExactInputSingle({
+    tokenIn, tokenOut, amountIn: parseEther('1'), fee, sqrtPriceLimitX96: 0
+});
 const minOut = expectedOut.mul(995).div(1000); // 0.5% slippage
 
 const params = {
@@ -169,13 +172,18 @@ function uniswapV3SwapCallback(
 
 ### Locked Positions
 
-VinuSwap supports position locking to prevent transfers:
+VinuSwap supports position locking to prevent **liquidity withdrawal**, not
+transfers:
 
 ```javascript
-// Lock position
-await positionManager.lock(tokenId, unlockTime);
+// Lock position (extend-only, irreversible, no upper bound)
+const deadline = Math.floor(Date.now() / 1000) + 300;
+await positionManager.lock(tokenId, lockedUntil, deadline);
 
-// Position cannot be transferred until unlockTime
+// Until lockedUntil: decreaseLiquidity reverts 'Locked'.
+// Still allowed: collect, increaseLiquidity, transfers (the lock travels with
+// the NFT), and burn once liquidity and tokensOwed are zero.
+// Any approved operator can also extend the lock.
 ```
 
 ### NFT Safety
