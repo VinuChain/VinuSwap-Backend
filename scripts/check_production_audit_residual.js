@@ -10,7 +10,9 @@ const MAX_BASELINE_COUNTS = {
     info: 0,
     low: 16,
     moderate: 8,
-    high: 1,
+    // @openzeppelin/contracts + the braces chain (braces, chokidar, mocha,
+    // hardhat, hardhat-watcher, @uniswap/swap-router-contracts); see below.
+    high: 7,
     critical: 0,
     total: 25,
 }
@@ -114,7 +116,7 @@ const KNOWN_PRODUCTION_RESIDUALS = {
         nodes: ['node_modules/@sentry/node'],
     },
     '@uniswap/swap-router-contracts': {
-        severity: 'moderate',
+        severity: 'high',
         isDirect: false,
         sources: [],
         nodes: ['node_modules/@uniswap/swap-router-contracts'],
@@ -137,6 +139,31 @@ const KNOWN_PRODUCTION_RESIDUALS = {
         sources: [],
         nodes: ['node_modules/@uniswap/v3-staker'],
     },
+    // npm advisory 1240992 (braces ReDoS, range "*", no patched release: 3.0.3
+    // is the latest braces). Reaches production only through the hardhat
+    // toolchain (hardhat-watcher/mocha -> chokidar -> braces), so every package
+    // in the chain inherits high. Remove all of these once braces ships a fix.
+    braces: {
+        severity: 'high',
+        isDirect: false,
+        sources: [1240992],
+        nodes: ['node_modules/braces'],
+    },
+    chokidar: {
+        severity: 'high',
+        isDirect: false,
+        sources: [],
+        nodes: [
+            'node_modules/chokidar',
+            'node_modules/hardhat/node_modules/mocha/node_modules/chokidar',
+        ],
+    },
+    mocha: {
+        severity: 'high',
+        isDirect: false,
+        sources: [],
+        nodes: ['node_modules/hardhat/node_modules/mocha'],
+    },
     cookie: {
         severity: 'low',
         isDirect: false,
@@ -156,13 +183,13 @@ const KNOWN_PRODUCTION_RESIDUALS = {
         nodes: ['node_modules/ethers'],
     },
     hardhat: {
-        severity: 'moderate',
+        severity: 'high',
         isDirect: true,
         sources: [],
         nodes: ['node_modules/hardhat'],
     },
     'hardhat-watcher': {
-        severity: 'moderate',
+        severity: 'high',
         isDirect: false,
         sources: [],
         nodes: ['node_modules/hardhat-watcher'],
