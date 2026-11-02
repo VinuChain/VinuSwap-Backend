@@ -9,7 +9,7 @@ const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const MAX_BASELINE_COUNTS = {
     info: 0,
     low: 16,
-    moderate: 8,
+    moderate: 9,
     // @openzeppelin/contracts + the braces chain (braces, chokidar, mocha,
     // hardhat, hardhat-watcher, @uniswap/swap-router-contracts); see below.
     high: 7,
@@ -199,6 +199,27 @@ const KNOWN_PRODUCTION_RESIDUALS = {
         isDirect: false,
         sources: [1112715, 1121860],
         nodes: ['node_modules/js-yaml'],
+    },
+    // Advisories with no patched release inside the major hardhat resolves
+    // (minimatch fixed only in 11.x, serialize-javascript <7.1.3 has no fix on
+    // the line mocha pins). Dev toolchain only; remove once upstream ships.
+    glob: {
+        severity: 'moderate',
+        isDirect: false,
+        sources: [],
+        nodes: ['node_modules/hardhat/node_modules/glob'],
+    },
+    minimatch: {
+        severity: 'moderate',
+        isDirect: false,
+        sources: [1244012],
+        nodes: ['node_modules/hardhat/node_modules/minimatch'],
+    },
+    'serialize-javascript': {
+        severity: 'low',
+        isDirect: false,
+        sources: [1243082],
+        nodes: ['node_modules/serialize-javascript'],
     },
     uuid: {
         severity: 'moderate',
